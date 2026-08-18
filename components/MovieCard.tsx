@@ -14,10 +14,30 @@ function formatReleaseDate(releaseDate: string): string {
   });
 }
 
-export function MovieCard({ movie }: { movie: TMDBMovie }) {
+export function MovieCard({
+  movie,
+  isWatched,
+  onToggleWatched,
+}: {
+  movie: TMDBMovie;
+  isWatched: boolean;
+  onToggleWatched: () => void;
+}) {
   return (
     <article className="flex flex-col">
       <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-black/10">
+        <button
+          type="button"
+          onClick={onToggleWatched}
+          aria-pressed={isWatched}
+          className={`absolute right-2 top-2 z-10 rounded-full px-3 py-1 text-xs font-medium shadow transition ${
+            isWatched
+              ? "bg-neutral-900 text-white"
+              : "bg-white/90 text-neutral-900 hover:bg-white"
+          }`}
+        >
+          {isWatched ? "Watched ✓" : "Mark watched"}
+        </button>
         {movie.poster_path ? (
           <Image
             src={`${POSTER_BASE_URL}${movie.poster_path}`}
