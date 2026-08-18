@@ -21,3 +21,12 @@ export interface TMDBPopularMoviesResponse {
   total_pages: number;
   total_results: number;
 }
+
+export interface TMDBGenre {
+  id: number;
+  name: string;
+}
+
+export interface TMDBGenreListResponse {
+  genres: TMDBGenre[];
+}

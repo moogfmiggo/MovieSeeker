@@ -3,7 +3,7 @@
 // from a "use client" component — process.env.TMDB_ACCESS_TOKEN must not
 // reach the browser bundle.
 
-import type { TMDBPopularMoviesResponse } from "@/types/tmdb";
+import type { TMDBGenreListResponse, TMDBPopularMoviesResponse } from "@/types/tmdb";
 
 const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
 
@@ -88,5 +88,12 @@ export async function getPopularMovies(page = 1): Promise<TMDBPopularMoviesRespo
   return tmdbFetch<TMDBPopularMoviesResponse>("/movie/popular", {
     language: "en-US",
     page: String(page),
+  });
+}
+
+/** Fetch TMDB's official movie genre list (en-US). Server-side only. */
+export async function getMovieGenres(): Promise<TMDBGenreListResponse> {
+  return tmdbFetch<TMDBGenreListResponse>("/genre/movie/list", {
+    language: "en-US",
   });
 }
