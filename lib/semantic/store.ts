@@ -26,9 +26,9 @@ export function isCoreAttribute(attribute: string): boolean {
 
 /**
  * In-memory reference implementation of SemanticFactStore. Suitable for
- * this Task's architecture and tests only - not persistent across server
- * restarts. A future Task can swap in a Supabase/Postgres-backed store
- * implementing the same interface without changing any calling code.
+ * tests and local development only - not persistent across process
+ * restarts. lib/semantic/supabase-store.ts implements the same interface
+ * against a real database without changing any calling code.
  */
 export class InMemorySemanticFactStore implements SemanticFactStore {
   private facts = new Map<string, SemanticFact>();
@@ -37,15 +37,15 @@ export class InMemorySemanticFactStore implements SemanticFactStore {
     return `${movieId}:${attribute}`;
   }
 
-  get(movieId: number, attribute: string): SemanticFact | undefined {
+  async get(movieId: number, attribute: string): Promise<SemanticFact | undefined> {
     return this.facts.get(this.key(movieId, attribute));
   }
 
-  set(fact: SemanticFact): void {
+  async set(fact: SemanticFact): Promise<void> {
     this.facts.set(this.key(fact.movieId, fact.attribute), fact);
   }
 
-  getAllForMovie(movieId: number): SemanticFact[] {
+  async getAllForMovie(movieId: number): Promise<SemanticFact[]> {
     return [...this.facts.values()].filter((fact) => fact.movieId === movieId);
   }
 }
@@ -53,12 +53,12 @@ export class InMemorySemanticFactStore implements SemanticFactStore {
 export type SemanticCoverage = "known" | "missing";
 
 /** Is there already a known (non-"unanalyzed") fact for this (movie, attribute)? */
-export function checkSemanticCoverage(
+export async function checkSemanticCoverage(
   store: SemanticFactStore,
   movieId: number,
   attribute: string,
-): SemanticCoverage {
-  const fact = store.get(movieId, attribute);
+): Promise<SemanticCoverage> {
+  const fact = await store.get(movieId, attribute);
   return fact && fact.status !== "unanalyzed" ? "known" : "missing";
 }
 
@@ -74,19 +74,19 @@ export async function getSemanticFact(
   movieId: number,
   attribute: string,
 ): Promise<SemanticFact> {
-  const existing = store.get(movieId, attribute);
+  const existing = await store.get(movieId, attribute);
   if (existing && existing.status !== "unanalyzed") {
     return existing;
   }
   const analyzed = await analyzer.analyze(movieId, attribute);
-  store.set(analyzed);
+  await store.set(analyzed);
   return analyzed;
 }
 
 /**
  * Defensively validates an untrusted/raw value as a SemanticFact (e.g. data
- * coming back from a future storage layer). Returns null rather than
- * throwing on anything malformed.
+ * coming back from a storage layer). Returns null rather than throwing on
+ * anything malformed.
  */
 export function parseSemanticFact(raw: unknown): SemanticFact | null {
   if (!raw || typeof raw !== "object") return null;

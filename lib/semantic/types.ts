@@ -45,13 +45,17 @@ export type SemanticFact = UnanalyzedSemanticFact | KnownSemanticFact;
  * Storage contract for semantic facts. This is shared, cross-user data -
  * deliberately NOT localStorage (which is per-browser and reserved for
  * user-specific state like preferences/watched movies). A real persistence
- * layer (Supabase, Postgres, etc) plugs in later by implementing this
- * interface; nothing else in the semantic system needs to change.
+ * layer (Supabase, Postgres, etc) plugs in by implementing this interface;
+ * nothing else in the semantic system needs to change.
+ *
+ * Async: any real (network-backed) provider requires it, so the in-memory
+ * reference implementation is async too - every implementation stays
+ * genuinely interchangeable.
  */
 export interface SemanticFactStore {
-  get(movieId: number, attribute: string): SemanticFact | undefined;
-  set(fact: SemanticFact): void;
-  getAllForMovie(movieId: number): SemanticFact[];
+  get(movieId: number, attribute: string): Promise<SemanticFact | undefined>;
+  set(fact: SemanticFact): Promise<void>;
+  getAllForMovie(movieId: number): Promise<SemanticFact[]>;
 }
 
 /**
