@@ -66,3 +66,41 @@ export interface SemanticFactStore {
 export interface SemanticAnalyzer {
   analyze(movieId: number, attribute: string): Promise<KnownSemanticFact>;
 }
+
+// --- Task 9: analysis queue (infrastructure only - nothing here executes
+// analysis, calls an LLM, or processes items automatically) ---
+
+export type AnalysisQueueStatus = "pending" | "processing" | "completed" | "failed";
+export type AnalysisQueuePriority = "low" | "normal" | "high";
+
+export interface AnalysisQueueItem {
+  id: number;
+  movieId: number;
+  attribute: string;
+  status: AnalysisQueueStatus;
+  priority: AnalysisQueuePriority;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Storage contract for the analysis queue - mirrors SemanticFactStore's
+ * provider-independence. findActive() only considers "pending"/"processing"
+ * items (queue dedup is defined in terms of active items, not all history).
+ */
+export interface AnalysisQueueStore {
+  findActive(movieId: number, attribute: string): Promise<AnalysisQueueItem | undefined>;
+  enqueue(
+    movieId: number,
+    attribute: string,
+    priority?: AnalysisQueuePriority,
+  ): Promise<AnalysisQueueItem>;
+  updateStatus(id: number, status: AnalysisQueueStatus): Promise<AnalysisQueueItem>;
+  getById(id: number): Promise<AnalysisQueueItem | undefined>;
+}
+
+/** Result of checking coverage for several requested attributes at once. */
+export interface CoverageResult {
+  known: string[];
+  missing: string[];
+}

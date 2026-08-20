@@ -1,7 +1,27 @@
 import { createClient } from "@supabase/supabase-js";
-import type { KnownSemanticFact, SemanticFact, SemanticFactStore } from "./types";
+import type {
+  AnalysisQueueItem,
+  AnalysisQueuePriority,
+  AnalysisQueueStatus,
+  AnalysisQueueStore,
+  KnownSemanticFact,
+  SemanticFact,
+  SemanticFactStore,
+} from "./types";
+import {
+  InvalidQueueInputError,
+  InvalidQueueTransitionError,
+  QueueItemNotFoundError,
+  isValidAttribute,
+  isValidMovieId,
+  isValidPriority,
+  isValidQueueStatus,
+  isValidQueueTransition,
+  pickMostAuthoritative,
+} from "./store";
 
-const TABLE = "semantic_facts";
+const FACTS_TABLE = "semantic_facts";
+const QUEUE_TABLE = "semantic_analysis_queue";
 
 export class SupabaseConfigError extends Error {
   constructor(message: string) {
@@ -33,6 +53,8 @@ function getClient() {
   return createClient(url, serviceRoleKey, { auth: { persistSession: false } });
 }
 
+// --- Semantic facts ---
+
 interface SemanticFactRow {
   movie_id: number;
   attribute: string;
@@ -60,28 +82,7 @@ function rowToFact(row: SemanticFactRow): SemanticFact | null {
       source: row.source,
     };
   }
-  // Malformed row (shouldn't happen given the schema's check constraint) -
-  // skip defensively rather than crash the caller.
-  return null;
-}
-
-const STATUS_PRIORITY: Record<string, number> = { verified: 2, inferred: 1 };
-
-/**
- * The unique key is (movie, attribute, source), so multiple sources can
- * legitimately have recorded a fact for the same (movie, attribute).
- * get() returns one answer, so when more than one exists: prefer
- * "verified" over "inferred", then higher confidence.
- */
-export function pickMostAuthoritative(facts: KnownSemanticFact[]): KnownSemanticFact {
-  return facts.reduce((best, candidate) => {
-    const bestPriority = STATUS_PRIORITY[best.status] ?? 0;
-    const candidatePriority = STATUS_PRIORITY[candidate.status] ?? 0;
-    if (candidatePriority !== bestPriority) {
-      return candidatePriority > bestPriority ? candidate : best;
-    }
-    return candidate.confidence > best.confidence ? candidate : best;
-  });
+  return null; // malformed row (shouldn't happen given the schema's check constraint)
 }
 
 /**
@@ -94,7 +95,7 @@ export class SupabaseSemanticFactStore implements SemanticFactStore {
   async get(movieId: number, attribute: string): Promise<SemanticFact | undefined> {
     const client = getClient();
     const { data, error } = await client
-      .from(TABLE)
+      .from(FACTS_TABLE)
       .select("movie_id, attribute, value, confidence, source, status")
       .eq("movie_id", movieId)
       .eq("attribute", attribute);
@@ -119,7 +120,7 @@ export class SupabaseSemanticFactStore implements SemanticFactStore {
     if (fact.status === "unanalyzed") return;
 
     const client = getClient();
-    const { error } = await client.from(TABLE).upsert(
+    const { error } = await client.from(FACTS_TABLE).upsert(
       {
         movie_id: fact.movieId,
         attribute: fact.attribute,
@@ -138,7 +139,7 @@ export class SupabaseSemanticFactStore implements SemanticFactStore {
   async getAllForMovie(movieId: number): Promise<SemanticFact[]> {
     const client = getClient();
     const { data, error } = await client
-      .from(TABLE)
+      .from(FACTS_TABLE)
       .select("movie_id, attribute, value, confidence, source, status")
       .eq("movie_id", movieId);
 
@@ -146,5 +147,131 @@ export class SupabaseSemanticFactStore implements SemanticFactStore {
     return ((data ?? []) as SemanticFactRow[])
       .map(rowToFact)
       .filter((fact): fact is SemanticFact => fact !== null);
+  }
+}
+
+// --- Task 9: analysis queue ---
+
+interface AnalysisQueueRow {
+  id: number;
+  movie_id: number;
+  attribute: string;
+  status: string;
+  priority: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToQueueItem(row: AnalysisQueueRow): AnalysisQueueItem {
+  return {
+    id: row.id,
+    movieId: row.movie_id,
+    attribute: row.attribute,
+    status: row.status as AnalysisQueueStatus,
+    priority: row.priority as AnalysisQueuePriority,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Supabase/PostgreSQL implementation of the Task 9 AnalysisQueueStore
+ * interface. See supabase/migrations/0002_create_semantic_analysis_queue.sql.
+ * Duplicate-active-request prevention is enforced at the database level via
+ * a partial unique index (movie_id, attribute) where status in
+ * ('pending','processing') - enqueue() also pre-checks via findActive() to
+ * avoid needing to reach the database for the common case, and gracefully
+ * recovers if a concurrent request wins the race.
+ */
+export class SupabaseAnalysisQueueStore implements AnalysisQueueStore {
+  async findActive(movieId: number, attribute: string): Promise<AnalysisQueueItem | undefined> {
+    const client = getClient();
+    const { data, error } = await client
+      .from(QUEUE_TABLE)
+      .select("id, movie_id, attribute, status, priority, created_at, updated_at")
+      .eq("movie_id", movieId)
+      .eq("attribute", attribute)
+      .in("status", ["pending", "processing"])
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw new SemanticStoreError(`Failed to check analysis queue: ${error.message}`);
+    return data ? rowToQueueItem(data as AnalysisQueueRow) : undefined;
+  }
+
+  async enqueue(
+    movieId: number,
+    attribute: string,
+    priority: AnalysisQueuePriority = "normal",
+  ): Promise<AnalysisQueueItem> {
+    if (!isValidMovieId(movieId)) {
+      throw new InvalidQueueInputError(`Invalid movieId: ${JSON.stringify(movieId)}`);
+    }
+    if (!isValidAttribute(attribute)) {
+      throw new InvalidQueueInputError(`Invalid attribute: ${JSON.stringify(attribute)}`);
+    }
+    if (!isValidPriority(priority)) {
+      throw new InvalidQueueInputError(`Invalid priority: ${JSON.stringify(priority)}`);
+    }
+
+    const existing = await this.findActive(movieId, attribute);
+    if (existing) return existing;
+
+    const client = getClient();
+    const { data, error } = await client
+      .from(QUEUE_TABLE)
+      .insert({ movie_id: movieId, attribute, status: "pending", priority })
+      .select("id, movie_id, attribute, status, priority, created_at, updated_at")
+      .single();
+
+    if (error) {
+      // Unique violation: a concurrent request won the race between our
+      // findActive() check and this insert. Treat as "already queued"
+      // rather than surfacing an error.
+      if (error.code === "23505") {
+        const raceWinner = await this.findActive(movieId, attribute);
+        if (raceWinner) return raceWinner;
+      }
+      throw new SemanticStoreError(`Failed to enqueue analysis request: ${error.message}`);
+    }
+    return rowToQueueItem(data as AnalysisQueueRow);
+  }
+
+  async updateStatus(id: number, status: AnalysisQueueStatus): Promise<AnalysisQueueItem> {
+    if (!isValidQueueStatus(status)) {
+      throw new InvalidQueueInputError(`Invalid status: ${JSON.stringify(status)}`);
+    }
+
+    const current = await this.getById(id);
+    if (!current) throw new QueueItemNotFoundError(`Queue item ${id} not found`);
+
+    if (!isValidQueueTransition(current.status, status)) {
+      throw new InvalidQueueTransitionError(
+        `Cannot transition queue item ${id} from '${current.status}' to '${status}'`,
+      );
+    }
+
+    const client = getClient();
+    const { data, error } = await client
+      .from(QUEUE_TABLE)
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("id, movie_id, attribute, status, priority, created_at, updated_at")
+      .single();
+
+    if (error) throw new SemanticStoreError(`Failed to update queue item: ${error.message}`);
+    return rowToQueueItem(data as AnalysisQueueRow);
+  }
+
+  async getById(id: number): Promise<AnalysisQueueItem | undefined> {
+    const client = getClient();
+    const { data, error } = await client
+      .from(QUEUE_TABLE)
+      .select("id, movie_id, attribute, status, priority, created_at, updated_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw new SemanticStoreError(`Failed to read queue item: ${error.message}`);
+    return data ? rowToQueueItem(data as AnalysisQueueRow) : undefined;
   }
 }
