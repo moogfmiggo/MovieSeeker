@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { TMDBGenre } from "@/types/tmdb";
 import { loadPreferences, savePreferences } from "@/lib/preferences";
 
 export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<"idle" | "saved" | "error">("idle");
+  // Whether there's a saved state worth continuing to /movies with - true
+  // once a save succeeds, or immediately if restored preferences already
+  // exist. Deliberately separate from `feedback`, which auto-hides after a
+  // few seconds; this should stay visible once it's true.
+  const [hasSavedPreferences, setHasSavedPreferences] = useState(false);
 
   // localStorage only exists in the browser, so preferences are restored
   // after mount rather than during the initial (server-rendered) render.
@@ -14,8 +20,10 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
   // read on mount (same shape as e.g. next-themes' mounted-check) and is a
   // documented false positive for this rule on exactly this pattern.
   useEffect(() => {
+    const restored = loadPreferences();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedGenreIds(loadPreferences());
+    setSelectedGenreIds(restored);
+    setHasSavedPreferences(restored.length > 0);
   }, []);
 
   useEffect(() => {
@@ -33,6 +41,7 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
   function handleSave() {
     const success = savePreferences(selectedGenreIds);
     setFeedback(success ? "saved" : "error");
+    if (success) setHasSavedPreferences(true);
   }
 
   return (
@@ -84,6 +93,17 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
           </span>
         )}
       </div>
+
+      {hasSavedPreferences && (
+        <p className="mt-4">
+          <Link
+            href="/movies"
+            className="text-sm font-medium text-neutral-900 underline underline-offset-2 hover:no-underline"
+          >
+            Go to Movies →
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

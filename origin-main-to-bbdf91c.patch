@@ -1,0 +1,383 @@
+diff --git a/app/api/tmdb/movies/route.ts b/app/api/tmdb/movies/route.ts
+new file mode 100644
+index 0000000..966b77d
+--- /dev/null
++++ b/app/api/tmdb/movies/route.ts
+@@ -0,0 +1,36 @@
++import { NextResponse } from "next/server";
++import { getMoviesByIds, TMDBConfigError, TMDBError } from "@/lib/tmdb";
++
++// Always fetch live from TMDB at request time — never statically cached at build time.
++export const dynamic = "force-dynamic";
++
++export async function GET(request: Request) {
++  const { searchParams } = new URL(request.url);
++  const ids = (searchParams.get("ids") ?? "")
++    .split(",")
++    .map((raw) => Number(raw.trim()))
++    .filter((id) => Number.isFinite(id) && id > 0);
++
++  if (ids.length === 0) {
++    return NextResponse.json({ results: [] });
++  }
++
++  try {
++    const movies = await getMoviesByIds(ids);
++    return NextResponse.json({ results: movies });
++  } catch (error) {
++    if (error instanceof TMDBConfigError) {
++      console.error("[tmdb] configuration error:", error.message);
++      return NextResponse.json({ error: error.message }, { status: 500 });
++    }
++    if (error instanceof TMDBError) {
++      console.error("[tmdb] request failed:", error.message);
++      return NextResponse.json({ error: error.message }, { status: 502 });
++    }
++    console.error(
++      "[tmdb] unexpected error:",
++      error instanceof Error ? error.message : "unknown error",
++    );
++    return NextResponse.json({ error: "Unexpected server error." }, { status: 500 });
++  }
++}
+diff --git a/app/layout.tsx b/app/layout.tsx
+index 7c8b6d8..70f94fb 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -1,5 +1,6 @@
+ import type { Metadata } from "next";
+ import "./globals.css";
++import { NavBar } from "@/components/NavBar";
+ 
+ export const metadata: Metadata = {
+   title: "Movie Recommendation",
+@@ -9,7 +10,10 @@ export const metadata: Metadata = {
+ export default function RootLayout({ children }: LayoutProps<"/">) {
+   return (
+     <html lang="en" className="h-full antialiased">
+-      <body className="min-h-full flex flex-col">{children}</body>
++      <body className="min-h-full flex flex-col">
++        <NavBar />
++        {children}
++      </body>
+     </html>
+   );
+ }
+diff --git a/app/page.tsx b/app/page.tsx
+index 8d41250..f230dec 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -17,4 +17,4 @@ export default function Home() {
+       </Link>
+     </main>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/app/watched/page.tsx b/app/watched/page.tsx
+new file mode 100644
+index 0000000..34d79b9
+--- /dev/null
++++ b/app/watched/page.tsx
+@@ -0,0 +1,11 @@
++import { WatchedList } from "@/components/WatchedList";
++
++export default function WatchedPage() {
++  return (
++    <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
++      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Watched Movies</h1>
++      <p className="mt-1 text-sm opacity-70">Movies you&apos;ve marked as watched.</p>
++      <WatchedList />
++    </main>
++  );
++}
+diff --git a/components/NavBar.tsx b/components/NavBar.tsx
+new file mode 100644
+index 0000000..ae97106
+--- /dev/null
++++ b/components/NavBar.tsx
+@@ -0,0 +1,24 @@
++import Link from "next/link";
++
++export function NavBar() {
++  return (
++    <header className="border-b border-black/10">
++      <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-4 sm:px-6">
++        <Link href="/" className="text-sm font-semibold tracking-tight">
++          MovieSeeker
++        </Link>
++        <div className="flex gap-4 text-sm">
++          <Link href="/movies" className="opacity-70 transition hover:opacity-100">
++            Movies
++          </Link>
++          <Link href="/preferences" className="opacity-70 transition hover:opacity-100">
++            Preferences
++          </Link>
++          <Link href="/watched" className="opacity-70 transition hover:opacity-100">
++            Watched
++          </Link>
++        </div>
++      </nav>
++    </header>
++  );
++}
+diff --git a/components/PreferencesForm.tsx b/components/PreferencesForm.tsx
+index ba8a12f..8f12db6 100644
+--- a/components/PreferencesForm.tsx
++++ b/components/PreferencesForm.tsx
+@@ -1,12 +1,18 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
++import Link from "next/link";
+ import type { TMDBGenre } from "@/types/tmdb";
+ import { loadPreferences, savePreferences } from "@/lib/preferences";
+ 
+ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
+   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
+   const [feedback, setFeedback] = useState<"idle" | "saved" | "error">("idle");
++  // Whether there's a saved state worth continuing to /movies with - true
++  // once a save succeeds, or immediately if restored preferences already
++  // exist. Deliberately separate from `feedback`, which auto-hides after a
++  // few seconds; this should stay visible once it's true.
++  const [hasSavedPreferences, setHasSavedPreferences] = useState(false);
+ 
+   // localStorage only exists in the browser, so preferences are restored
+   // after mount rather than during the initial (server-rendered) render.
+@@ -14,8 +20,10 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
+   // read on mount (same shape as e.g. next-themes' mounted-check) and is a
+   // documented false positive for this rule on exactly this pattern.
+   useEffect(() => {
++    const restored = loadPreferences();
+     // eslint-disable-next-line react-hooks/set-state-in-effect
+-    setSelectedGenreIds(loadPreferences());
++    setSelectedGenreIds(restored);
++    setHasSavedPreferences(restored.length > 0);
+   }, []);
+ 
+   useEffect(() => {
+@@ -33,6 +41,7 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
+   function handleSave() {
+     const success = savePreferences(selectedGenreIds);
+     setFeedback(success ? "saved" : "error");
++    if (success) setHasSavedPreferences(true);
+   }
+ 
+   return (
+@@ -84,6 +93,17 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
+           </span>
+         )}
+       </div>
++
++      {hasSavedPreferences && (
++        <p className="mt-4">
++          <Link
++            href="/movies"
++            className="text-sm font-medium text-neutral-900 underline underline-offset-2 hover:no-underline"
++          >
++            Go to Movies →
++          </Link>
++        </p>
++      )}
+     </div>
+   );
+ }
+diff --git a/components/WatchedList.tsx b/components/WatchedList.tsx
+new file mode 100644
+index 0000000..1f09dc7
+--- /dev/null
++++ b/components/WatchedList.tsx
+@@ -0,0 +1,100 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import Link from "next/link";
++import type { TMDBMovie } from "@/types/tmdb";
++import { MovieCard } from "@/components/MovieCard";
++import { loadWatched, toggleWatched } from "@/lib/watched";
++
++type Status = "loading" | "ready" | "error";
++
++export function WatchedList() {
++  const [status, setStatus] = useState<Status>("loading");
++  const [movies, setMovies] = useState<TMDBMovie[]>([]);
++
++  useEffect(() => {
++    let cancelled = false;
++
++    async function load() {
++      const watchedIds = loadWatched();
++      if (watchedIds.length === 0) {
++        if (!cancelled) {
++          setMovies([]);
++          setStatus("ready");
++        }
++        return;
++      }
++      try {
++        const res = await fetch(`/api/tmdb/movies?ids=${watchedIds.join(",")}`);
++        if (!res.ok) throw new Error(`request failed with status ${res.status}`);
++        const data: unknown = await res.json();
++        const results =
++          data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)
++            ? ((data as { results: TMDBMovie[] }).results)
++            : [];
++        if (!cancelled) {
++          setMovies(results);
++          setStatus("ready");
++        }
++      } catch {
++        if (!cancelled) setStatus("error");
++      }
++    }
++
++    load();
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  function handleUnwatch(movieId: number) {
++    toggleWatched(movieId);
++    setMovies((current) => current.filter((movie) => movie.id !== movieId));
++  }
++
++  if (status === "loading") {
++    return (
++      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5">
++        {Array.from({ length: 5 }).map((_, i) => (
++          <div key={i} className="animate-pulse">
++            <div className="aspect-[2/3] rounded-lg bg-black/10" />
++            <div className="mt-2 h-4 w-3/4 rounded bg-black/10" />
++            <div className="mt-1 h-3 w-1/2 rounded bg-black/10" />
++          </div>
++        ))}
++      </div>
++    );
++  }
++
++  if (status === "error") {
++    return (
++      <p className="mt-8 text-sm text-red-700">
++        Couldn&apos;t load your watched movies right now. Please try again.
++      </p>
++    );
++  }
++
++  if (movies.length === 0) {
++    return (
++      <div className="mt-8 rounded-lg border border-black/10 p-6 text-center text-sm">
++        <p>No watched movies yet.</p>
++        <Link
++          href="/movies"
++          className="mt-3 inline-block text-neutral-900 underline underline-offset-2"
++        >
++          Browse Movies
++        </Link>
++      </div>
++    );
++  }
++
++  return (
++    <ul className="mt-6 grid list-none grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5">
++      {movies.map((movie) => (
++        <li key={movie.id}>
++          <MovieCard movie={movie} isWatched onToggleWatched={() => handleUnwatch(movie.id)} />
++        </li>
++      ))}
++    </ul>
++  );
++}
+diff --git a/lib/tmdb.ts b/lib/tmdb.ts
+index f7d72e8..00b6332 100644
+--- a/lib/tmdb.ts
++++ b/lib/tmdb.ts
+@@ -3,7 +3,11 @@
+ // from a "use client" component — process.env.TMDB_ACCESS_TOKEN must not
+ // reach the browser bundle.
+ 
+-import type { TMDBGenreListResponse, TMDBPopularMoviesResponse } from "@/types/tmdb";
++import type {
++  TMDBGenreListResponse,
++  TMDBMovie,
++  TMDBPopularMoviesResponse,
++} from "@/types/tmdb";
+ 
+ const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
+ 
+@@ -97,3 +101,75 @@ export async function getMovieGenres(): Promise<TMDBGenreListResponse> {
+     language: "en-US",
+   });
+ }
++
++interface TMDBMovieDetailsResponse {
++  id: number;
++  title: string;
++  overview: string;
++  poster_path: string | null;
++  backdrop_path: string | null;
++  release_date: string;
++  vote_average: number;
++  vote_count: number;
++  popularity: number;
++  genres: { id: number; name: string }[];
++  original_language: string;
++  original_title: string;
++  adult: boolean;
++  video: boolean;
++}
++
++function detailsToMovie(details: TMDBMovieDetailsResponse): TMDBMovie {
++  return {
++    id: details.id,
++    title: details.title,
++    overview: details.overview,
++    poster_path: details.poster_path,
++    backdrop_path: details.backdrop_path,
++    release_date: details.release_date,
++    vote_average: details.vote_average,
++    vote_count: details.vote_count,
++    popularity: details.popularity,
++    genre_ids: details.genres.map((genre) => genre.id),
++    original_language: details.original_language,
++    original_title: details.original_title,
++    adult: details.adult,
++    video: details.video,
++  };
++}
++
++/**
++ * Fetch full details for one movie by TMDB ID (en-US). Server-side only.
++ * Used to reconstruct movie cards from watched-state IDs — lib/watched.ts
++ * only stores IDs, never full movie objects.
++ */
++export async function getMovieById(movieId: number): Promise<TMDBMovie> {
++  const details = await tmdbFetch<TMDBMovieDetailsResponse>(`/movie/${movieId}`, {
++    language: "en-US",
++  });
++  return detailsToMovie(details);
++}
++
++/**
++ * Fetch details for multiple movies by ID. TMDB has no bulk-by-ID endpoint,
++ * so this issues one request per ID. An individual failure (e.g. a
++ * deleted/invalid id) is skipped rather than failing the whole batch -
++ * unless every single lookup fails, which more likely indicates a systemic
++ * problem (missing config, TMDB unreachable) and is surfaced as an error
++ * instead of silently returning an empty list.
++ */
++export async function getMoviesByIds(movieIds: number[]): Promise<TMDBMovie[]> {
++  if (movieIds.length === 0) return [];
++
++  const results = await Promise.allSettled(movieIds.map((id) => getMovieById(id)));
++  const fulfilled = results.filter(
++    (r): r is PromiseFulfilledResult<TMDBMovie> => r.status === "fulfilled",
++  );
++
++  if (fulfilled.length === 0) {
++    const firstRejection = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
++    if (firstRejection) throw firstRejection.reason;
++  }
++
++  return fulfilled.map((r) => r.value);
++}

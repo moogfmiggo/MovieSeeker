@@ -3,7 +3,11 @@
 // from a "use client" component — process.env.TMDB_ACCESS_TOKEN must not
 // reach the browser bundle.
 
-import type { TMDBGenreListResponse, TMDBPopularMoviesResponse } from "@/types/tmdb";
+import type {
+  TMDBGenreListResponse,
+  TMDBMovie,
+  TMDBPopularMoviesResponse,
+} from "@/types/tmdb";
 
 const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
 
@@ -96,4 +100,76 @@ export async function getMovieGenres(): Promise<TMDBGenreListResponse> {
   return tmdbFetch<TMDBGenreListResponse>("/genre/movie/list", {
     language: "en-US",
   });
+}
+
+interface TMDBMovieDetailsResponse {
+  id: number;
+  title: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  release_date: string;
+  vote_average: number;
+  vote_count: number;
+  popularity: number;
+  genres: { id: number; name: string }[];
+  original_language: string;
+  original_title: string;
+  adult: boolean;
+  video: boolean;
+}
+
+function detailsToMovie(details: TMDBMovieDetailsResponse): TMDBMovie {
+  return {
+    id: details.id,
+    title: details.title,
+    overview: details.overview,
+    poster_path: details.poster_path,
+    backdrop_path: details.backdrop_path,
+    release_date: details.release_date,
+    vote_average: details.vote_average,
+    vote_count: details.vote_count,
+    popularity: details.popularity,
+    genre_ids: details.genres.map((genre) => genre.id),
+    original_language: details.original_language,
+    original_title: details.original_title,
+    adult: details.adult,
+    video: details.video,
+  };
+}
+
+/**
+ * Fetch full details for one movie by TMDB ID (en-US). Server-side only.
+ * Used to reconstruct movie cards from watched-state IDs — lib/watched.ts
+ * only stores IDs, never full movie objects.
+ */
+export async function getMovieById(movieId: number): Promise<TMDBMovie> {
+  const details = await tmdbFetch<TMDBMovieDetailsResponse>(`/movie/${movieId}`, {
+    language: "en-US",
+  });
+  return detailsToMovie(details);
+}
+
+/**
+ * Fetch details for multiple movies by ID. TMDB has no bulk-by-ID endpoint,
+ * so this issues one request per ID. An individual failure (e.g. a
+ * deleted/invalid id) is skipped rather than failing the whole batch -
+ * unless every single lookup fails, which more likely indicates a systemic
+ * problem (missing config, TMDB unreachable) and is surfaced as an error
+ * instead of silently returning an empty list.
+ */
+export async function getMoviesByIds(movieIds: number[]): Promise<TMDBMovie[]> {
+  if (movieIds.length === 0) return [];
+
+  const results = await Promise.allSettled(movieIds.map((id) => getMovieById(id)));
+  const fulfilled = results.filter(
+    (r): r is PromiseFulfilledResult<TMDBMovie> => r.status === "fulfilled",
+  );
+
+  if (fulfilled.length === 0) {
+    const firstRejection = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (firstRejection) throw firstRejection.reason;
+  }
+
+  return fulfilled.map((r) => r.value);
 }
