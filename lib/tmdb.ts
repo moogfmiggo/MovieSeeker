@@ -4,8 +4,12 @@
 // reach the browser bundle.
 
 import type {
+  TMDBCompanyDetails,
   TMDBGenreListResponse,
   TMDBMovie,
+  TMDBMovieDetails,
+  TMDBPersonDetails,
+  TMDBPersonMovieCreditsResponse,
   TMDBPopularMoviesResponse,
 } from "@/types/tmdb";
 
@@ -172,4 +176,57 @@ export async function getMoviesByIds(movieIds: number[]): Promise<TMDBMovie[]> {
   }
 
   return fulfilled.map((r) => r.value);
+}
+
+/**
+ * Fetch full details for one movie, including genres (as objects), runtime,
+ * production companies, and top-level cast/crew (via TMDB's
+ * append_to_response=credits, so this is a single request). Used by the
+ * movie detail page. Server-side only.
+ */
+export async function getMovieDetails(movieId: number): Promise<TMDBMovieDetails> {
+  return tmdbFetch<TMDBMovieDetails>(`/movie/${movieId}`, {
+    language: "en-US",
+    append_to_response: "credits",
+  });
+}
+
+/** Fetch a person's profile (name, photo, known-for department, bio). Server-side only. */
+export async function getPersonDetails(personId: number): Promise<TMDBPersonDetails> {
+  return tmdbFetch<TMDBPersonDetails>(`/person/${personId}`, {
+    language: "en-US",
+  });
+}
+
+/**
+ * Fetch a person's movie acting + crew credits. Used to build a person's
+ * filmography on their profile page. Server-side only.
+ */
+export async function getPersonMovieCredits(
+  personId: number,
+): Promise<TMDBPersonMovieCreditsResponse> {
+  return tmdbFetch<TMDBPersonMovieCreditsResponse>(`/person/${personId}/movie_credits`, {
+    language: "en-US",
+  });
+}
+
+/** Fetch a production company's profile (name, logo). Server-side only. */
+export async function getCompanyDetails(companyId: number): Promise<TMDBCompanyDetails> {
+  return tmdbFetch<TMDBCompanyDetails>(`/company/${companyId}`, {});
+}
+
+/**
+ * Fetch movies associated with a production company, most popular first.
+ * Used to build a company's movies page. Server-side only.
+ */
+export async function getMoviesByCompany(
+  companyId: number,
+  page = 1,
+): Promise<TMDBPopularMoviesResponse> {
+  return tmdbFetch<TMDBPopularMoviesResponse>("/discover/movie", {
+    with_companies: String(companyId),
+    language: "en-US",
+    page: String(page),
+    sort_by: "popularity.desc",
+  });
 }
