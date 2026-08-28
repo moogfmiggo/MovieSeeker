@@ -8,7 +8,7 @@ export default function Home() {
       <p className="max-w-md text-lg opacity-70">{th.home.subtitle}</p>
       <Link
         href="/movies"
-        className="mt-4 rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+        className="mt-4 rounded-full bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:bg-accent-hover"
       >
         {th.home.cta}
       </Link>

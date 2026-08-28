@@ -67,7 +67,7 @@ export default async function PersonPage({ params }: PageProps<"/person/[id]">) 
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="flex flex-col gap-6 sm:flex-row">
         <div className="w-40 flex-shrink-0 sm:w-48">
-          <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-black/10">
+          <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface ring-1 ring-border">
             {person.profile_path ? (
               <Image
                 src={`${PROFILE_BASE_URL}${person.profile_path}`}

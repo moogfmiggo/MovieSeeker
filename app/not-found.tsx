@@ -8,7 +8,7 @@ export default function NotFound() {
       <p className="max-w-sm text-sm opacity-70">{th.notFound.body}</p>
       <Link
         href="/"
-        className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+        className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:bg-accent-hover"
       >
         {th.notFound.backHome}
       </Link>

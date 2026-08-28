@@ -17,7 +17,7 @@ export function ProviderBadge({
 }) {
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-black/10 ring-1 ring-black/10"
+      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface ring-1 ring-border"
       style={{ width: size, height: size }}
       title={provider.provider_name}
     >

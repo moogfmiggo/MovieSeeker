@@ -66,9 +66,9 @@ export function WatchedList() {
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} className="animate-pulse">
-            <div className="aspect-[2/3] rounded-lg bg-black/10" />
-            <div className="mt-2 h-4 w-3/4 rounded bg-black/10" />
-            <div className="mt-1 h-3 w-1/2 rounded bg-black/10" />
+            <div className="aspect-[2/3] rounded-lg bg-surface" />
+            <div className="mt-2 h-4 w-3/4 rounded bg-surface" />
+            <div className="mt-1 h-3 w-1/2 rounded bg-surface" />
           </div>
         ))}
       </div>
@@ -76,16 +76,16 @@ export function WatchedList() {
   }
 
   if (status === "error") {
-    return <p className="mt-8 text-sm text-red-700">{th.watchedPage.loadError}</p>;
+    return <p className="mt-8 text-sm text-red-400">{th.watchedPage.loadError}</p>;
   }
 
   if (movies.length === 0) {
     return (
-      <div className="mt-8 rounded-lg border border-black/10 p-6 text-center text-sm">
+      <div className="mt-8 rounded-lg border border-border p-6 text-center text-sm">
         <p>{th.watchedPage.empty}</p>
         <Link
           href="/movies"
-          className="mt-3 inline-block text-neutral-900 underline underline-offset-2"
+          className="mt-3 inline-block text-accent underline underline-offset-2"
         >
           {th.watchedPage.browseMovies}
         </Link>

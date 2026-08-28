@@ -23,7 +23,7 @@ export default function MoviesError({
       <button
         type="button"
         onClick={() => retry()}
-        className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+        className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:bg-accent-hover"
       >
         {th.common.tryAgain}
       </button>

@@ -64,17 +64,17 @@ export default async function CompanyPage({ params }: PageProps<"/company/[id]">
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="flex items-center gap-4">
-        <div className="flex h-16 w-32 flex-shrink-0 items-center justify-center rounded-lg border border-black/10 p-2">
+        <div className="flex h-16 w-32 flex-shrink-0 items-center justify-center rounded-lg bg-foreground/95 p-2">
           {company.logo_path ? (
             <Image
               src={`${LOGO_BASE_URL}${company.logo_path}`}
               alt={company.name}
               width={120}
               height={56}
-              className="max-h-14 w-auto object-contain"
+              className="max-h-11 w-auto object-contain"
             />
           ) : (
-            <span className="text-xs opacity-40">{th.common.noLogo}</span>
+            <span className="text-xs text-background/50">{th.common.noLogo}</span>
           )}
         </div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{company.name}</h1>

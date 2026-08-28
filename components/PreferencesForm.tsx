@@ -64,8 +64,8 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
                 onClick={() => toggleGenre(genre.id)}
                 className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
                   isSelected
-                    ? "border-neutral-900 bg-neutral-900 text-white"
-                    : "border-black/15 bg-transparent hover:border-black/30"
+                    ? "border-accent bg-accent text-accent-foreground"
+                    : "border-border bg-transparent hover:border-border-strong"
                 }`}
               >
                 {genre.name}
@@ -79,17 +79,17 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
         <button
           type="button"
           onClick={handleSave}
-          className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+          className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:bg-accent-hover"
         >
           {th.preferencesPage.save}
         </button>
         {feedback === "saved" && (
-          <span role="status" className="text-sm text-green-700">
+          <span role="status" className="text-sm text-green-400">
             {th.preferencesPage.saved}
           </span>
         )}
         {feedback === "error" && (
-          <span role="status" className="text-sm text-red-700">
+          <span role="status" className="text-sm text-red-400">
             {th.preferencesPage.saveError}
           </span>
         )}
@@ -99,7 +99,7 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
         <p className="mt-4">
           <Link
             href="/movies"
-            className="text-sm font-medium text-neutral-900 underline underline-offset-2 hover:no-underline"
+            className="text-sm font-medium text-accent underline underline-offset-2 hover:no-underline"
           >
             {th.preferencesPage.goToMovies}
           </Link>

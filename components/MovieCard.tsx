@@ -39,15 +39,15 @@ export function MovieCard({
 
   return (
     <article className="flex flex-col">
-      <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-black/10">
+      <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface ring-1 ring-border">
         <button
           type="button"
           onClick={onToggleWatched}
           aria-pressed={isWatched}
           className={`absolute right-2 top-2 z-10 rounded-full px-3 py-1 text-xs font-medium shadow transition ${
             isWatched
-              ? "bg-neutral-900 text-white"
-              : "bg-white/90 text-neutral-900 hover:bg-white"
+              ? "bg-accent text-accent-foreground"
+              : "bg-black/60 text-white backdrop-blur-sm hover:bg-black/75"
           }`}
         >
           {isWatched ? th.watched.watched : th.watched.markWatched}

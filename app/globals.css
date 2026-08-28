@@ -1,24 +1,39 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Cinematic dark theme - deliberately the site's identity (not tied to OS
+     preference), matching how movie/streaming apps present themselves. */
+  --background: #0b0b0e;
+  --surface: #18181d;
+  --surface-hover: #212127;
+  --foreground: #f3f1ec;
+  --muted: rgb(243 241 236 / 65%);
+  --subtle: rgb(243 241 236 / 40%);
+  --border: rgb(255 255 255 / 10%);
+  --border-strong: rgb(255 255 255 / 22%);
+  /* Warm gold accent - a spotlight/premiere cue, distinct from the generic
+     red/blue most streaming UIs default to. */
+  --accent: #e8b84b;
+  --accent-hover: #f2c869;
+  --accent-foreground: #1a1406;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
   --color-foreground: var(--foreground);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Thai", Arial, sans-serif;
 }

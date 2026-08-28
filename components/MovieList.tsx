@@ -47,16 +47,16 @@ export function MovieList({
   return (
     <div className="mt-6">
       {isPersonalized && (
-        <p className="mb-3 text-sm font-medium text-neutral-700">{th.movieList.recommendedForYou}</p>
+        <p className="mb-3 text-sm font-medium text-accent">{th.movieList.recommendedForYou}</p>
       )}
 
       {allWatched ? (
-        <div className="rounded-lg border border-black/10 p-6 text-center text-sm">
+        <div className="rounded-lg border border-border p-6 text-center text-sm">
           <p>{th.movieList.allWatched}</p>
           <button
             type="button"
             onClick={() => setShowWatchedToo(true)}
-            className="mt-3 text-neutral-900 underline underline-offset-2"
+            className="mt-3 text-accent underline underline-offset-2"
           >
             {th.movieList.showWatchedToo}
           </button>

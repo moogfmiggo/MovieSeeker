@@ -99,7 +99,7 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
 
   return (
     <main>
-      <div className="relative overflow-hidden bg-neutral-900 text-white">
+      <div className="relative overflow-hidden bg-background text-foreground">
         {movie.backdrop_path && (
           <div className="absolute inset-0">
             <Image
@@ -109,12 +109,12 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
               priority
               className="object-cover opacity-40"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-neutral-900 via-neutral-900/80 to-neutral-900/40" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/40" />
           </div>
         )}
         <div className="relative mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:flex-row sm:px-6 sm:py-12">
           <div className="w-40 flex-shrink-0 sm:w-56">
-            <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-black/30 shadow-xl">
+            <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface shadow-xl ring-1 ring-border">
               {movie.poster_path ? (
                 <Image
                   src={`${POSTER_BASE_URL}${movie.poster_path}`}
@@ -136,7 +136,7 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm opacity-80">
               {year && <span>{year}</span>}
               {movie.runtime ? <span>{formatRuntime(movie.runtime)}</span> : null}
-              <span>★ {movie.vote_average.toFixed(1)}</span>
+              <span className="font-medium text-accent">★ {movie.vote_average.toFixed(1)}</span>
             </div>
             {movie.genres.length > 0 && (
               <div className="flex flex-wrap gap-2">

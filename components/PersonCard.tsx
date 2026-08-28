@@ -20,7 +20,7 @@ export function PersonCard({
       href={`/person/${id}`}
       className="group flex w-24 flex-shrink-0 flex-col items-center text-center sm:w-28"
     >
-      <div className="relative aspect-square w-full overflow-hidden rounded-full bg-black/10">
+      <div className="relative aspect-square w-full overflow-hidden rounded-full bg-surface ring-1 ring-border">
         {profilePath ? (
           <Image
             src={`${PROFILE_BASE_URL}${profilePath}`}

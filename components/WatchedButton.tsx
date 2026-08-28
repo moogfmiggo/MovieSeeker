@@ -28,7 +28,7 @@ export function WatchedButton({ movieId }: { movieId: number }) {
       onClick={() => setWatched(toggleWatched(movieId).includes(movieId))}
       aria-pressed={watched}
       className={`rounded-full px-6 py-3 text-sm font-medium shadow transition ${
-        watched ? "bg-neutral-900 text-white" : "bg-white/90 text-neutral-900 hover:bg-white"
+        watched ? "bg-accent text-accent-foreground" : "bg-black/60 text-white backdrop-blur-sm hover:bg-black/75"
       }`}
     >
       {watched ? th.watched.watched : th.watched.markWatched}
