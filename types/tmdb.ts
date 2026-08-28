@@ -110,3 +110,27 @@ export interface TMDBCompanyDetails {
   name: string;
   logo_path: string | null;
 }
+
+export interface TMDBWatchProvider {
+  provider_id: number;
+  provider_name: string;
+  logo_path: string | null;
+  display_priority: number;
+}
+
+/** One region's watch-provider offer, as returned by TMDB (powered by JustWatch). */
+export interface TMDBWatchProviderRegion {
+  /** TMDB-hosted watch page for this title/region; required attribution link if data is shown. */
+  link?: string;
+  flatrate?: TMDBWatchProvider[];
+  free?: TMDBWatchProvider[];
+  ads?: TMDBWatchProvider[];
+  rent?: TMDBWatchProvider[];
+  buy?: TMDBWatchProvider[];
+}
+
+/** Response of GET /movie/{id}/watch/providers - keyed by ISO 3166-1 region code. */
+export interface TMDBWatchProvidersResponse {
+  id: number;
+  results: Record<string, TMDBWatchProviderRegion>;
+}

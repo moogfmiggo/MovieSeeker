@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { th } from "@/lib/i18n";
 
 const LOGO_BASE_URL = "https://image.tmdb.org/t/p/w185";
 
@@ -28,7 +29,7 @@ export function CompanyCard({
             className="max-h-12 w-auto object-contain"
           />
         ) : (
-          <span className="text-xs opacity-40">No logo</span>
+          <span className="text-xs opacity-40">{th.common.noLogo}</span>
         )}
       </div>
       <span className="line-clamp-2 text-xs font-medium group-hover:underline">{name}</span>

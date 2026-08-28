@@ -11,6 +11,7 @@ import type {
   TMDBPersonDetails,
   TMDBPersonMovieCreditsResponse,
   TMDBPopularMoviesResponse,
+  TMDBWatchProvidersResponse,
 } from "@/types/tmdb";
 
 const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
@@ -44,6 +45,7 @@ function getAccessToken(): string {
 async function tmdbFetch<T>(
   path: string,
   searchParams: Record<string, string> = {},
+  options: { revalidateSeconds?: number } = {},
 ): Promise<T> {
   const token = getAccessToken();
 
@@ -59,6 +61,12 @@ async function tmdbFetch<T>(
         Authorization: `Bearer ${token}`,
         accept: "application/json",
       },
+      // Unset (default): no caching, matches every existing caller's
+      // always-fresh behavior. Only opted into for data that's expensive to
+      // fetch per-item and changes rarely, e.g. watch providers.
+      ...(options.revalidateSeconds !== undefined
+        ? { next: { revalidate: options.revalidateSeconds } }
+        : {}),
     });
   } catch {
     // Network-level failure (DNS, connection refused, etc). Never include
@@ -102,7 +110,7 @@ export async function getPopularMovies(page = 1): Promise<TMDBPopularMoviesRespo
 /** Fetch TMDB's official movie genre list (en-US). Server-side only. */
 export async function getMovieGenres(): Promise<TMDBGenreListResponse> {
   return tmdbFetch<TMDBGenreListResponse>("/genre/movie/list", {
-    language: "en-US",
+    language: "th-TH",
   });
 }
 
@@ -229,4 +237,49 @@ export async function getMoviesByCompany(
     page: String(page),
     sort_by: "popularity.desc",
   });
+}
+
+// Watch-provider catalogs (which service has a title, and in which region)
+// change far less often than the data above, so these are cached via Next's
+// fetch cache instead of refetched on every request.
+const WATCH_PROVIDERS_REVALIDATE_SECONDS = 60 * 60 * 6; // 6 hours
+
+/**
+ * Fetch raw watch-provider data (all regions TMDB has) for one movie.
+ * Server-side only. Shape it for display with summarizeWatchProviders from
+ * lib/watchProviders.ts rather than reading `.results` directly.
+ */
+export async function getWatchProviders(movieId: number): Promise<TMDBWatchProvidersResponse> {
+  return tmdbFetch<TMDBWatchProvidersResponse>(
+    `/movie/${movieId}/watch/providers`,
+    {},
+    { revalidateSeconds: WATCH_PROVIDERS_REVALIDATE_SECONDS },
+  );
+}
+
+/**
+ * Fetch raw watch-provider data for multiple movies in parallel. TMDB has no
+ * bulk endpoint for this. Unlike getMoviesByIds, an individual failure is
+ * just omitted from the result (never throws) - one movie's missing
+ * streaming info must never take down a whole grid; callers/UI already treat
+ * a missing entry the same as "no providers found" for that movie.
+ */
+export async function getWatchProvidersForMovies(
+  movieIds: number[],
+): Promise<Record<number, TMDBWatchProvidersResponse>> {
+  const uniqueIds = [...new Set(movieIds)];
+  if (uniqueIds.length === 0) return {};
+
+  const settled = await Promise.allSettled(
+    uniqueIds.map(async (id) => [id, await getWatchProviders(id)] as const),
+  );
+
+  const byMovieId: Record<number, TMDBWatchProvidersResponse> = {};
+  for (const result of settled) {
+    if (result.status === "fulfilled") {
+      const [id, providers] = result.value;
+      byMovieId[id] = providers;
+    }
+  }
+  return byMovieId;
 }

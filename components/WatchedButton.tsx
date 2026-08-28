@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { loadWatched, toggleWatched } from "@/lib/watched";
+import { th } from "@/lib/i18n";
 
 /**
  * Self-contained watched toggle for a single movie (the detail page hero).
@@ -30,7 +31,7 @@ export function WatchedButton({ movieId }: { movieId: number }) {
         watched ? "bg-neutral-900 text-white" : "bg-white/90 text-neutral-900 hover:bg-white"
       }`}
     >
-      {watched ? "Watched ✓" : "Mark watched"}
+      {watched ? th.watched.watched : th.watched.markWatched}
     </button>
   );
 }

@@ -2,12 +2,20 @@
 
 import { useEffect, useState } from "react";
 import type { TMDBMovie } from "@/types/tmdb";
+import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
 import { loadPreferences } from "@/lib/preferences";
 import { recommendMovies } from "@/lib/recommendations";
 import { loadWatched, toggleWatched, filterUnwatched } from "@/lib/watched";
+import { th } from "@/lib/i18n";
 
-export function MovieList({ movies }: { movies: TMDBMovie[] }) {
+export function MovieList({
+  movies,
+  providersByMovieId,
+}: {
+  movies: TMDBMovie[];
+  providersByMovieId?: Record<number, WatchProviderSummary>;
+}) {
   // Server-rendered/initial-hydration state matches what the server sent
   // (original TMDB order, nothing filtered) - preferences and watched state
   // live in localStorage, which only exists client-side, so both are
@@ -30,7 +38,7 @@ export function MovieList({ movies }: { movies: TMDBMovie[] }) {
   }
 
   if (orderedMovies.length === 0) {
-    return <p className="mt-8 text-sm opacity-70">No movies found.</p>;
+    return <p className="mt-8 text-sm opacity-70">{th.movieList.noMoviesFound}</p>;
   }
 
   const visibleMovies = showWatchedToo ? orderedMovies : filterUnwatched(orderedMovies, watchedIds);
@@ -39,18 +47,18 @@ export function MovieList({ movies }: { movies: TMDBMovie[] }) {
   return (
     <div className="mt-6">
       {isPersonalized && (
-        <p className="mb-3 text-sm font-medium text-neutral-700">Recommended for you</p>
+        <p className="mb-3 text-sm font-medium text-neutral-700">{th.movieList.recommendedForYou}</p>
       )}
 
       {allWatched ? (
         <div className="rounded-lg border border-black/10 p-6 text-center text-sm">
-          <p>You&apos;ve watched everything in this list.</p>
+          <p>{th.movieList.allWatched}</p>
           <button
             type="button"
             onClick={() => setShowWatchedToo(true)}
             className="mt-3 text-neutral-900 underline underline-offset-2"
           >
-            Show watched movies
+            {th.movieList.showWatchedToo}
           </button>
         </div>
       ) : (
@@ -61,6 +69,7 @@ export function MovieList({ movies }: { movies: TMDBMovie[] }) {
                 movie={movie}
                 isWatched={watchedIds.includes(movie.id)}
                 onToggleWatched={() => handleToggleWatched(movie.id)}
+                providers={providersByMovieId?.[movie.id]}
               />
             </li>
           ))}

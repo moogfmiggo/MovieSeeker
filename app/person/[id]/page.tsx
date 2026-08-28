@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { getPersonDetails, getPersonMovieCredits, TMDBError } from "@/lib/tmdb";
+import { getPersonDetails, getPersonMovieCredits, getWatchProvidersForMovies, TMDBError } from "@/lib/tmdb";
 import { filterDirectingCredits, mergeFilmography } from "@/lib/credits";
+import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { MovieGrid } from "@/components/MovieGrid";
+import { th } from "@/lib/i18n";
 
 const PROFILE_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
@@ -21,12 +23,12 @@ export async function generateMetadata({
 }: PageProps<"/person/[id]">): Promise<Metadata> {
   const { id } = await params;
   const personId = parseId(id);
-  if (personId === null) return { title: "Person not found" };
+  if (personId === null) return { title: th.notFound.title };
   try {
     const person = await getPersonDetails(personId);
-    return { title: `${person.name} — Movie Recommendation` };
+    return { title: `${person.name} ${th.meta.titleSuffix}` };
   } catch {
-    return { title: "Movie Recommendation" };
+    return { title: th.meta.brand };
   }
 }
 
@@ -58,6 +60,9 @@ export default async function PersonPage({ params }: PageProps<"/person/[id]">) 
   const directingCredits = filterDirectingCredits(credits.crew);
   const filmography = mergeFilmography(credits.cast, directingCredits);
 
+  const rawProviders = await getWatchProvidersForMovies(filmography.map((movie) => movie.id));
+  const providersByMovieId = summarizeWatchProvidersByMovie(rawProviders);
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="flex flex-col gap-6 sm:flex-row">
@@ -73,7 +78,7 @@ export default async function PersonPage({ params }: PageProps<"/person/[id]">) 
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center p-4 text-center text-xs opacity-50">
-                No photo available
+                {th.common.noPhotoAvailable}
               </div>
             )}
           </div>
@@ -81,7 +86,9 @@ export default async function PersonPage({ params }: PageProps<"/person/[id]">) 
         <div className="flex flex-1 flex-col gap-2">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{person.name}</h1>
           {person.known_for_department && (
-            <p className="text-sm opacity-60">Known for: {person.known_for_department}</p>
+            <p className="text-sm opacity-60">
+              {th.person.knownFor}: {th.person.department[person.known_for_department] ?? person.known_for_department}
+            </p>
           )}
           {person.biography && (
             <p className="mt-2 line-clamp-6 max-w-2xl text-sm opacity-80">{person.biography}</p>
@@ -90,8 +97,12 @@ export default async function PersonPage({ params }: PageProps<"/person/[id]">) 
       </div>
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Filmography</h2>
-        <MovieGrid movies={filmography} emptyMessage="No movies found for this person." />
+        <h2 className="text-lg font-semibold">{th.person.filmography}</h2>
+        <MovieGrid
+          movies={filmography}
+          emptyMessage={th.person.noMoviesFound}
+          providersByMovieId={providersByMovieId}
+        />
       </section>
     </main>
   );

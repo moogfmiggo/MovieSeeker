@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import type { TMDBMovie } from "@/types/tmdb";
+import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
 import { loadWatched, toggleWatched } from "@/lib/watched";
+import { th } from "@/lib/i18n";
 
 /**
  * Renders a responsive grid of MovieCards wired to watched state - the same
@@ -13,10 +15,12 @@ import { loadWatched, toggleWatched } from "@/lib/watched";
  */
 export function MovieGrid({
   movies,
-  emptyMessage = "No movies found.",
+  emptyMessage = th.movieList.noMoviesFound,
+  providersByMovieId,
 }: {
   movies: TMDBMovie[];
   emptyMessage?: string;
+  providersByMovieId?: Record<number, WatchProviderSummary>;
 }) {
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
 
@@ -41,6 +45,7 @@ export function MovieGrid({
             movie={movie}
             isWatched={watchedIds.includes(movie.id)}
             onToggleWatched={() => handleToggleWatched(movie.id)}
+            providers={providersByMovieId?.[movie.id]}
           />
         </li>
       ))}

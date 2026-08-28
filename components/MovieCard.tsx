@@ -1,14 +1,20 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { TMDBMovie } from "@/types/tmdb";
+import type { WatchProviderSummary } from "@/lib/watchProviders";
+import { topProvidersForCard } from "@/lib/watchProviders";
+import { ProviderBadge } from "@/components/ProviderBadge";
+import { th } from "@/lib/i18n";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
 function formatReleaseDate(releaseDate: string): string {
-  if (!releaseDate) return "Release date unknown";
+  if (!releaseDate) return th.common.releaseDateUnknown;
   const parsed = new Date(releaseDate);
-  if (Number.isNaN(parsed.getTime())) return "Release date unknown";
-  return parsed.toLocaleDateString("en-US", {
+  if (Number.isNaN(parsed.getTime())) return th.common.releaseDateUnknown;
+  // th-TH-u-ca-gregory: Thai month names, but Gregorian year (not Buddhist
+  // Era +543) - movie release years read oddly in BE even in Thai UI.
+  return parsed.toLocaleDateString("th-TH-u-ca-gregory", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -19,11 +25,18 @@ export function MovieCard({
   movie,
   isWatched,
   onToggleWatched,
+  providers,
 }: {
   movie: TMDBMovie;
   isWatched: boolean;
   onToggleWatched: () => void;
+  /** Omitted entirely (not an empty state) when there's no data - see the streaming row below. */
+  providers?: WatchProviderSummary;
 }) {
+  const { visible: providerBadges, moreCount } = providers
+    ? topProvidersForCard(providers)
+    : { visible: [], moreCount: 0 };
+
   return (
     <article className="flex flex-col">
       <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-black/10">
@@ -37,12 +50,12 @@ export function MovieCard({
               : "bg-white/90 text-neutral-900 hover:bg-white"
           }`}
         >
-          {isWatched ? "Watched ✓" : "Mark watched"}
+          {isWatched ? th.watched.watched : th.watched.markWatched}
         </button>
         <Link
           href={`/movies/${movie.id}`}
           className="block h-full w-full"
-          aria-label={`View details for ${movie.title}`}
+          aria-label={th.common.viewDetailsFor(movie.title)}
         >
           {movie.poster_path ? (
             <Image
@@ -67,7 +80,7 @@ export function MovieCard({
                 <circle cx="9" cy="9" r="2" />
                 <path d="m21 15-5-5L5 21" />
               </svg>
-              <span>No poster available</span>
+              <span>{th.common.noPosterAvailable}</span>
             </div>
           )}
         </Link>
@@ -77,8 +90,21 @@ export function MovieCard({
       </Link>
       <p className="text-xs opacity-60">{formatReleaseDate(movie.release_date)}</p>
       <p className="mt-1 line-clamp-3 text-xs opacity-80">
-        {movie.overview ? movie.overview : "No description available."}
+        {movie.overview ? movie.overview : th.common.noDescription}
       </p>
+      {providerBadges.length > 0 && (
+        <div className="mt-2 flex items-center gap-1.5 overflow-hidden">
+          <span className="shrink-0 text-[11px] font-medium opacity-60">{th.streaming.whereToWatch}</span>
+          <div className="flex items-center gap-1">
+            {providerBadges.map((provider) => (
+              <ProviderBadge key={provider.provider_id} provider={provider} size={22} />
+            ))}
+          </div>
+          {moreCount > 0 && (
+            <span className="shrink-0 text-[11px] font-medium opacity-50">{th.streaming.more(moreCount)}</span>
+          )}
+        </div>
+      )}
     </article>
   );
 }

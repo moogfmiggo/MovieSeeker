@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { getMovieDetails, TMDBError } from "@/lib/tmdb";
+import { getMovieDetails, getWatchProviders, TMDBError } from "@/lib/tmdb";
 import { topBilledCast, movieDirectors } from "@/lib/credits";
+import { summarizeWatchProviders } from "@/lib/watchProviders";
 import { PersonCard } from "@/components/PersonCard";
 import { CompanyCard } from "@/components/CompanyCard";
 import { WatchedButton } from "@/components/WatchedButton";
+import { WatchProviderSection } from "@/components/WatchProviderSection";
+import { th } from "@/lib/i18n";
 
 const BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/w1280";
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
@@ -38,12 +41,12 @@ export async function generateMetadata({
 }: PageProps<"/movies/[id]">): Promise<Metadata> {
   const { id } = await params;
   const movieId = parseId(id);
-  if (movieId === null) return { title: "Movie not found" };
+  if (movieId === null) return { title: th.notFound.title };
   try {
     const movie = await getMovieDetails(movieId);
-    return { title: `${movie.title} — Movie Recommendation` };
+    return { title: `${movie.title} ${th.meta.titleSuffix}` };
   } catch {
-    return { title: "Movie Recommendation" };
+    return { title: th.meta.brand };
   }
 }
 
@@ -52,10 +55,16 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
   const movieId = parseId(id);
   if (movieId === null) notFound();
 
+  const [movieResult, providersResult] = await Promise.allSettled([
+    getMovieDetails(movieId),
+    getWatchProviders(movieId),
+  ]);
+
   let movie;
-  try {
-    movie = await getMovieDetails(movieId);
-  } catch (error) {
+  if (movieResult.status === "fulfilled") {
+    movie = movieResult.value;
+  } else {
+    const error = movieResult.reason;
     if (error instanceof TMDBError && error.status === 404) {
       notFound();
     }
@@ -69,6 +78,20 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
     );
     throw new Error("Unable to load this movie right now.");
   }
+
+  // A failed provider lookup degrades to the "no streaming info" empty state
+  // (Part 1) instead of failing the whole page - the movie itself loaded fine.
+  if (providersResult.status === "rejected") {
+    console.error(
+      "[movie detail] failed to load watch providers",
+      movieId,
+      ":",
+      providersResult.reason instanceof Error ? providersResult.reason.message : "unknown error",
+    );
+  }
+  const watchProviders = summarizeWatchProviders(
+    providersResult.status === "fulfilled" ? providersResult.value : null,
+  );
 
   const cast = topBilledCast(movie.credits?.cast);
   const directorList = movieDirectors(movie.credits?.crew);
@@ -102,7 +125,7 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center p-4 text-center text-xs opacity-50">
-                  No poster available
+                  {th.common.noPosterAvailable}
                 </div>
               )}
             </div>
@@ -134,23 +157,23 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         {movie.overview && (
           <section>
-            <h2 className="text-lg font-semibold">Overview</h2>
+            <h2 className="text-lg font-semibold">{th.movieDetail.overview}</h2>
             <p className="mt-2 max-w-3xl text-sm opacity-80">{movie.overview}</p>
           </section>
         )}
 
+        <WatchProviderSection providers={watchProviders} />
+
         {directorList.length > 0 && (
           <section className="mt-8">
-            <h2 className="text-lg font-semibold">
-              {directorList.length > 1 ? "Directors" : "Director"}
-            </h2>
+            <h2 className="text-lg font-semibold">{th.movieDetail.director}</h2>
             <div className="mt-3 flex flex-wrap gap-4">
               {directorList.map((director) => (
                 <PersonCard
                   key={director.id}
                   id={director.id}
                   name={director.name}
-                  role="Director"
+                  role={th.movieDetail.director}
                   profilePath={director.profile_path}
                 />
               ))}
@@ -159,7 +182,7 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
         )}
 
         <section className="mt-8">
-          <h2 className="text-lg font-semibold">Cast</h2>
+          <h2 className="text-lg font-semibold">{th.movieDetail.cast}</h2>
           {cast.length > 0 ? (
             <div className="mt-3 flex gap-4 overflow-x-auto pb-2">
               {cast.map((member) => (
@@ -173,12 +196,12 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
               ))}
             </div>
           ) : (
-            <p className="mt-2 text-sm opacity-60">No cast information available.</p>
+            <p className="mt-2 text-sm opacity-60">{th.movieDetail.noCastInfo}</p>
           )}
         </section>
 
         <section className="mt-8">
-          <h2 className="text-lg font-semibold">Production</h2>
+          <h2 className="text-lg font-semibold">{th.movieDetail.production}</h2>
           {movie.production_companies.length > 0 ? (
             <div className="mt-3 flex flex-wrap gap-3">
               {movie.production_companies.map((company) => (
@@ -191,7 +214,7 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
               ))}
             </div>
           ) : (
-            <p className="mt-2 text-sm opacity-60">No production company information available.</p>
+            <p className="mt-2 text-sm opacity-60">{th.movieDetail.noProductionInfo}</p>
           )}
         </section>
       </div>

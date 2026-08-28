@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TMDBMovie } from "@/types/tmdb";
+import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
 import { loadWatched, toggleWatched } from "@/lib/watched";
+import { th } from "@/lib/i18n";
 
 type Status = "loading" | "ready" | "error";
 
 export function WatchedList() {
   const [status, setStatus] = useState<Status>("loading");
   const [movies, setMovies] = useState<TMDBMovie[]>([]);
+  const [providersByMovieId, setProvidersByMovieId] = useState<Record<number, WatchProviderSummary>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -32,8 +35,14 @@ export function WatchedList() {
           data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)
             ? ((data as { results: TMDBMovie[] }).results)
             : [];
+        const rawProviders = data && typeof data === "object" ? (data as { providers?: unknown }).providers : null;
+        const providers =
+          rawProviders && typeof rawProviders === "object"
+            ? (rawProviders as Record<number, WatchProviderSummary>)
+            : {};
         if (!cancelled) {
           setMovies(results);
+          setProvidersByMovieId(providers);
           setStatus("ready");
         }
       } catch {
@@ -67,22 +76,18 @@ export function WatchedList() {
   }
 
   if (status === "error") {
-    return (
-      <p className="mt-8 text-sm text-red-700">
-        Couldn&apos;t load your watched movies right now. Please try again.
-      </p>
-    );
+    return <p className="mt-8 text-sm text-red-700">{th.watchedPage.loadError}</p>;
   }
 
   if (movies.length === 0) {
     return (
       <div className="mt-8 rounded-lg border border-black/10 p-6 text-center text-sm">
-        <p>No watched movies yet.</p>
+        <p>{th.watchedPage.empty}</p>
         <Link
           href="/movies"
           className="mt-3 inline-block text-neutral-900 underline underline-offset-2"
         >
-          Browse Movies
+          {th.watchedPage.browseMovies}
         </Link>
       </div>
     );
@@ -92,7 +97,12 @@ export function WatchedList() {
     <ul className="mt-6 grid list-none grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5">
       {movies.map((movie) => (
         <li key={movie.id}>
-          <MovieCard movie={movie} isWatched onToggleWatched={() => handleUnwatch(movie.id)} />
+          <MovieCard
+            movie={movie}
+            isWatched
+            onToggleWatched={() => handleUnwatch(movie.id)}
+            providers={providersByMovieId[movie.id]}
+          />
         </li>
       ))}
     </ul>

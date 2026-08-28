@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getMoviesByIds, TMDBConfigError, TMDBError } from "@/lib/tmdb";
+import { getMoviesByIds, getWatchProvidersForMovies, TMDBConfigError, TMDBError } from "@/lib/tmdb";
+import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 
 // Always fetch live from TMDB at request time — never statically cached at build time.
 export const dynamic = "force-dynamic";
@@ -17,7 +18,11 @@ export async function GET(request: Request) {
 
   try {
     const movies = await getMoviesByIds(ids);
-    return NextResponse.json({ results: movies });
+    // Never throws - see getWatchProvidersForMovies. A provider lookup
+    // failure must not turn a successful movie lookup into a 502.
+    const rawProviders = await getWatchProvidersForMovies(movies.map((movie) => movie.id));
+    const providers = summarizeWatchProvidersByMovie(rawProviders);
+    return NextResponse.json({ results: movies, providers });
   } catch (error) {
     if (error instanceof TMDBConfigError) {
       console.error("[tmdb] configuration error:", error.message);

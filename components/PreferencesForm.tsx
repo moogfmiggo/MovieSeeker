@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TMDBGenre } from "@/types/tmdb";
 import { loadPreferences, savePreferences } from "@/lib/preferences";
+import { th } from "@/lib/i18n";
 
 export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
@@ -48,8 +49,8 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
     <div>
       <p className="text-sm opacity-70">
         {selectedGenreIds.length === 0
-          ? "No genres selected yet."
-          : `${selectedGenreIds.length} genre${selectedGenreIds.length === 1 ? "" : "s"} selected.`}
+          ? th.preferencesPage.noneSelected
+          : th.preferencesPage.selectedCount(selectedGenreIds.length)}
       </p>
 
       <ul className="mt-4 flex list-none flex-wrap gap-2 p-0">
@@ -80,16 +81,16 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
           onClick={handleSave}
           className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
         >
-          Save preferences
+          {th.preferencesPage.save}
         </button>
         {feedback === "saved" && (
           <span role="status" className="text-sm text-green-700">
-            Preferences saved.
+            {th.preferencesPage.saved}
           </span>
         )}
         {feedback === "error" && (
           <span role="status" className="text-sm text-red-700">
-            Couldn&apos;t save preferences. Please try again.
+            {th.preferencesPage.saveError}
           </span>
         )}
       </div>
@@ -100,7 +101,7 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
             href="/movies"
             className="text-sm font-medium text-neutral-900 underline underline-offset-2 hover:no-underline"
           >
-            Go to Movies →
+            {th.preferencesPage.goToMovies}
           </Link>
         </p>
       )}

@@ -1,6 +1,7 @@
 "use client"; // Error boundaries must be Client Components
 
 import { useEffect } from "react";
+import { th } from "@/lib/i18n";
 
 export default function MovieDetailError({
   error,
@@ -17,16 +18,14 @@ export default function MovieDetailError({
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-16 text-center sm:px-6">
-      <h1 className="text-xl font-semibold">We couldn&apos;t load this movie</h1>
-      <p className="max-w-sm text-sm opacity-70">
-        Something went wrong while fetching this movie from TMDB. Please try again.
-      </p>
+      <h1 className="text-xl font-semibold">{th.movieDetailError.title}</h1>
+      <p className="max-w-sm text-sm opacity-70">{th.movieDetailError.body}</p>
       <button
         type="button"
         onClick={() => retry()}
         className="rounded-full bg-neutral-900 px-6 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
       >
-        Try again
+        {th.common.tryAgain}
       </button>
     </main>
   );

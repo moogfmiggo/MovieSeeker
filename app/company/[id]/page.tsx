@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { notFound } from "next/navigation";
-import { getCompanyDetails, getMoviesByCompany, TMDBError } from "@/lib/tmdb";
+import { getCompanyDetails, getMoviesByCompany, getWatchProvidersForMovies, TMDBError } from "@/lib/tmdb";
+import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { MovieGrid } from "@/components/MovieGrid";
+import { th } from "@/lib/i18n";
 
 const LOGO_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
@@ -20,12 +22,12 @@ export async function generateMetadata({
 }: PageProps<"/company/[id]">): Promise<Metadata> {
   const { id } = await params;
   const companyId = parseId(id);
-  if (companyId === null) return { title: "Company not found" };
+  if (companyId === null) return { title: th.notFound.title };
   try {
     const company = await getCompanyDetails(companyId);
-    return { title: `${company.name} — Movie Recommendation` };
+    return { title: `${company.name} ${th.meta.titleSuffix}` };
   } catch {
-    return { title: "Movie Recommendation" };
+    return { title: th.meta.brand };
   }
 }
 
@@ -56,6 +58,9 @@ export default async function CompanyPage({ params }: PageProps<"/company/[id]">
     throw new Error("Unable to load this company right now.");
   }
 
+  const rawProviders = await getWatchProvidersForMovies(movies.map((movie) => movie.id));
+  const providersByMovieId = summarizeWatchProvidersByMovie(rawProviders);
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <div className="flex items-center gap-4">
@@ -69,15 +74,19 @@ export default async function CompanyPage({ params }: PageProps<"/company/[id]">
               className="max-h-14 w-auto object-contain"
             />
           ) : (
-            <span className="text-xs opacity-40">No logo</span>
+            <span className="text-xs opacity-40">{th.common.noLogo}</span>
           )}
         </div>
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{company.name}</h1>
       </div>
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Movies</h2>
-        <MovieGrid movies={movies} emptyMessage="No movies found for this company." />
+        <h2 className="text-lg font-semibold">{th.company.movies}</h2>
+        <MovieGrid
+          movies={movies}
+          emptyMessage={th.company.noMoviesFound}
+          providersByMovieId={providersByMovieId}
+        />
       </section>
     </main>
   );
