@@ -5,31 +5,32 @@ import Link from "next/link";
 import type { TMDBMovie } from "@/types/tmdb";
 import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
-import { loadWatched, toggleWatched } from "@/lib/watched";
 import { loadFavorites, toggleFavorite } from "@/lib/favorites";
+import { loadWatched, toggleWatched } from "@/lib/watched";
 import { th } from "@/lib/i18n";
 
 type Status = "loading" | "ready" | "error";
 
-export function WatchedList() {
+export function FavoritesList() {
   const [status, setStatus] = useState<Status>("loading");
   const [movies, setMovies] = useState<TMDBMovie[]>([]);
   const [providersByMovieId, setProvidersByMovieId] = useState<Record<number, WatchProviderSummary>>({});
-  // Favorites are local state, independent of the async movie fetch above -
-  // loaded in their own effect rather than folded into `load()`.
-  const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
+  // Watched is a secondary signal on this page (every card here is already
+  // favorited) - loaded independently so the card can still show accurate
+  // watched state instead of assuming "not watched".
+  const [watchedIds, setWatchedIds] = useState<number[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFavoriteIds(loadFavorites());
+    setWatchedIds(loadWatched());
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      const watchedIds = loadWatched();
-      if (watchedIds.length === 0) {
+      const favoriteIds = loadFavorites();
+      if (favoriteIds.length === 0) {
         if (!cancelled) {
           setMovies([]);
           setStatus("ready");
@@ -37,7 +38,7 @@ export function WatchedList() {
         return;
       }
       try {
-        const res = await fetch(`/api/tmdb/movies?ids=${watchedIds.join(",")}`);
+        const res = await fetch(`/api/tmdb/movies?ids=${favoriteIds.join(",")}`);
         if (!res.ok) throw new Error(`request failed with status ${res.status}`);
         const data: unknown = await res.json();
         const results =
@@ -65,13 +66,13 @@ export function WatchedList() {
     };
   }, []);
 
-  function handleUnwatch(movieId: number) {
-    toggleWatched(movieId);
+  function handleUnfavorite(movieId: number) {
+    toggleFavorite(movieId);
     setMovies((current) => current.filter((movie) => movie.id !== movieId));
   }
 
-  function handleToggleFavorite(movieId: number) {
-    setFavoriteIds(toggleFavorite(movieId));
+  function handleToggleWatched(movieId: number) {
+    setWatchedIds(toggleWatched(movieId));
   }
 
   if (status === "loading") {
@@ -89,18 +90,15 @@ export function WatchedList() {
   }
 
   if (status === "error") {
-    return <p className="mt-8 text-sm text-red-400">{th.watchedPage.loadError}</p>;
+    return <p className="mt-8 text-sm text-red-400">{th.favoritesPage.loadError}</p>;
   }
 
   if (movies.length === 0) {
     return (
       <div className="mt-8 rounded-lg border border-border p-6 text-center text-sm">
-        <p>{th.watchedPage.empty}</p>
-        <Link
-          href="/movies"
-          className="mt-3 inline-block text-accent underline underline-offset-2"
-        >
-          {th.watchedPage.browseMovies}
+        <p>{th.favoritesPage.empty}</p>
+        <Link href="/movies" className="mt-3 inline-block text-accent underline underline-offset-2">
+          {th.favoritesPage.browseMovies}
         </Link>
       </div>
     );
@@ -112,10 +110,10 @@ export function WatchedList() {
         <li key={movie.id}>
           <MovieCard
             movie={movie}
-            isWatched
-            onToggleWatched={() => handleUnwatch(movie.id)}
-            isFavorited={favoriteIds.includes(movie.id)}
-            onToggleFavorite={() => handleToggleFavorite(movie.id)}
+            isWatched={watchedIds.includes(movie.id)}
+            onToggleWatched={() => handleToggleWatched(movie.id)}
+            isFavorited
+            onToggleFavorite={() => handleUnfavorite(movie.id)}
             providers={providersByMovieId[movie.id]}
           />
         </li>

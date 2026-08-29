@@ -7,6 +7,7 @@ import { summarizeWatchProviders } from "@/lib/watchProviders";
 import { PersonCard } from "@/components/PersonCard";
 import { CompanyCard } from "@/components/CompanyCard";
 import { WatchedButton } from "@/components/WatchedButton";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { WatchProviderSection } from "@/components/WatchProviderSection";
 import { th } from "@/lib/i18n";
 
@@ -147,7 +148,8 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
                 ))}
               </div>
             )}
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap gap-3">
+              <FavoriteButton movieId={movie.id} movieTitle={movie.title} />
               <WatchedButton movieId={movie.id} />
             </div>
           </div>

@@ -8,6 +8,23 @@ import { th } from "@/lib/i18n";
 
 const POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342";
 
+/** Filled when favorited, outline otherwise - the visual state must be obvious at a glance. */
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.75"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M12 20.5s-7.5-4.6-10-9.1C.5 7.8 2.4 4.5 5.8 4c2.1-.3 4.1.8 6.2 3.2C14.1 4.8 16.1 3.7 18.2 4c3.4.5 5.3 3.8 3.8 7.4-2.5 4.5-10 9.1-10 9.1z" />
+    </svg>
+  );
+}
+
 function formatReleaseDate(releaseDate: string): string {
   if (!releaseDate) return th.common.releaseDateUnknown;
   const parsed = new Date(releaseDate);
@@ -25,11 +42,15 @@ export function MovieCard({
   movie,
   isWatched,
   onToggleWatched,
+  isFavorited,
+  onToggleFavorite,
   providers,
 }: {
   movie: TMDBMovie;
   isWatched: boolean;
   onToggleWatched: () => void;
+  isFavorited: boolean;
+  onToggleFavorite: () => void;
   /** Omitted entirely (not an empty state) when there's no data - see the streaming row below. */
   providers?: WatchProviderSummary;
 }) {
@@ -40,6 +61,27 @@ export function MovieCard({
   return (
     <article className="flex flex-col">
       <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface ring-1 ring-border">
+        <button
+          type="button"
+          onClick={(event) => {
+            // This button is a sibling of the poster Link below, not nested
+            // inside it, so it can't trigger navigation structurally - but
+            // stop propagation anyway as explicit, robust protection against
+            // an accidental "click through" to the card underneath.
+            event.stopPropagation();
+            onToggleFavorite();
+          }}
+          aria-pressed={isFavorited}
+          aria-label={isFavorited ? th.favorite.removeLabel(movie.title) : th.favorite.addLabel(movie.title)}
+          title={isFavorited ? th.favorite.removeLabel(movie.title) : th.favorite.addLabel(movie.title)}
+          className={`absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full shadow transition ${
+            isFavorited
+              ? "bg-accent text-accent-foreground"
+              : "bg-black/60 text-white backdrop-blur-sm hover:bg-black/75"
+          }`}
+        >
+          <HeartIcon filled={isFavorited} />
+        </button>
         <button
           type="button"
           onClick={onToggleWatched}

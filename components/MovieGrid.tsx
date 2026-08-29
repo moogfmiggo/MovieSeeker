@@ -5,6 +5,7 @@ import type { TMDBMovie } from "@/types/tmdb";
 import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
 import { loadWatched, toggleWatched } from "@/lib/watched";
+import { loadFavorites, toggleFavorite } from "@/lib/favorites";
 import { th } from "@/lib/i18n";
 
 /**
@@ -23,14 +24,20 @@ export function MovieGrid({
   providersByMovieId?: Record<number, WatchProviderSummary>;
 }) {
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setWatchedIds(loadWatched());
+    setFavoriteIds(loadFavorites());
   }, []);
 
   function handleToggleWatched(movieId: number) {
     setWatchedIds(toggleWatched(movieId));
+  }
+
+  function handleToggleFavorite(movieId: number) {
+    setFavoriteIds(toggleFavorite(movieId));
   }
 
   if (movies.length === 0) {
@@ -45,6 +52,8 @@ export function MovieGrid({
             movie={movie}
             isWatched={watchedIds.includes(movie.id)}
             onToggleWatched={() => handleToggleWatched(movie.id)}
+            isFavorited={favoriteIds.includes(movie.id)}
+            onToggleFavorite={() => handleToggleFavorite(movie.id)}
             providers={providersByMovieId?.[movie.id]}
           />
         </li>

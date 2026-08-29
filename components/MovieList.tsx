@@ -7,6 +7,7 @@ import { MovieCard } from "@/components/MovieCard";
 import { loadPreferences } from "@/lib/preferences";
 import { recommendMovies } from "@/lib/recommendations";
 import { loadWatched, toggleWatched, filterUnwatched } from "@/lib/watched";
+import { loadFavorites, toggleFavorite } from "@/lib/favorites";
 import { th } from "@/lib/i18n";
 
 export function MovieList({
@@ -23,6 +24,7 @@ export function MovieList({
   const [orderedMovies, setOrderedMovies] = useState<TMDBMovie[]>(movies);
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [showWatchedToo, setShowWatchedToo] = useState(false);
 
   useEffect(() => {
@@ -31,10 +33,15 @@ export function MovieList({
     setOrderedMovies(recommendMovies(movies, selectedGenreIds));
     setIsPersonalized(selectedGenreIds.length > 0);
     setWatchedIds(loadWatched());
+    setFavoriteIds(loadFavorites());
   }, [movies]);
 
   function handleToggleWatched(movieId: number) {
     setWatchedIds(toggleWatched(movieId));
+  }
+
+  function handleToggleFavorite(movieId: number) {
+    setFavoriteIds(toggleFavorite(movieId));
   }
 
   if (orderedMovies.length === 0) {
@@ -69,6 +76,8 @@ export function MovieList({
                 movie={movie}
                 isWatched={watchedIds.includes(movie.id)}
                 onToggleWatched={() => handleToggleWatched(movie.id)}
+                isFavorited={favoriteIds.includes(movie.id)}
+                onToggleFavorite={() => handleToggleFavorite(movie.id)}
                 providers={providersByMovieId?.[movie.id]}
               />
             </li>

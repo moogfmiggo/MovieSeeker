@@ -21,6 +21,7 @@ export const th = {
     movies: "หนัง",
     preferences: "ตั้งค่าความชอบ",
     watched: "ดูแล้ว",
+    favorites: "รายการโปรด",
   },
   common: {
     tryAgain: "ลองอีกครั้ง",
@@ -35,6 +36,13 @@ export const th = {
   watched: {
     markWatched: "ทำเครื่องหมายว่าดูแล้ว",
     watched: "ดูแล้ว ✓",
+  },
+  favorite: {
+    add: "เพิ่มในรายการโปรด",
+    remove: "นำออกจากรายการโปรด",
+    /** Accessible label/title on the MovieCard heart toggle - includes the movie title. */
+    addLabel: (title: string) => `เพิ่ม "${title}" ในรายการโปรด`,
+    removeLabel: (title: string) => `นำ "${title}" ออกจากรายการโปรด`,
   },
   home: {
     title: "ค้นหาหนังที่ใช่สำหรับคุณ",
@@ -61,6 +69,13 @@ export const th = {
     empty: "ยังไม่มีหนังที่ดูแล้ว",
     browseMovies: "ดูหนังทั้งหมด",
     loadError: "ไม่สามารถโหลดหนังที่ดูแล้วได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
+  },
+  favoritesPage: {
+    title: "รายการโปรด",
+    subtitle: "หนังที่คุณทำเครื่องหมายว่าชอบ",
+    empty: "ยังไม่มีหนังในรายการโปรด",
+    browseMovies: "ดูหนังทั้งหมด",
+    loadError: "ไม่สามารถโหลดรายการโปรดได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
   preferencesPage: {
     title: "ตั้งค่าความชอบ",
