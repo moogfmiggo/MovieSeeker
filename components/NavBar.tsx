@@ -21,6 +21,9 @@ export function NavBar() {
           <Link href="/favorites" className="text-muted transition hover:text-foreground">
             {th.nav.favorites}
           </Link>
+          <Link href="/streaming" className="text-muted transition hover:text-foreground">
+            {th.nav.streaming}
+          </Link>
         </div>
       </nav>
     </header>

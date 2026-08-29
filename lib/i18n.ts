@@ -22,6 +22,7 @@ export const th = {
     preferences: "ตั้งค่าความชอบ",
     watched: "ดูแล้ว",
     favorites: "รายการโปรด",
+    streaming: "บริการสตรีมมิ่ง",
   },
   common: {
     tryAgain: "ลองอีกครั้ง",
@@ -147,5 +148,41 @@ export const th = {
     notFound: "ไม่พบข้อมูลช่องทางรับชม",
     more: (count: number) => `+${count}`,
     attribution: "ข้อมูลผู้ให้บริการจาก JustWatch",
+  },
+  /** Phase 3: personalized streaming-service recommendation ("/streaming"). */
+  streamingRecommendation: {
+    pageTitle: "บริการสตรีมมิ่งที่เหมาะกับคุณ",
+    pageSubtitle: "วิเคราะห์จากหนังที่คุณสนใจ ไม่ใช่ความนิยมทั่วไป",
+    /** Always shown alongside any result - the core "this is personalization, not a quality claim" disclaimer. */
+    disclaimer: "คำแนะนำนี้อิงจากหนังที่คุณสนใจเท่านั้น ไม่ได้สะท้อนคุณภาพหรือความนิยมของผู้ให้บริการ โปรดใช้เป็นข้อมูลประกอบการตัดสินใจ",
+    bestMatchLabel: "บริการที่เหมาะกับคุณที่สุด",
+    matchCount: (count: number) => `เหมาะกับหนังที่คุณสนใจ ${count} เรื่อง`,
+    watchMatches: (count: number) => `ดูหนังที่ตรงกับคุณได้ ${count} เรื่อง`,
+    whySectionTitle: "ทำไมเราถึงแนะนำ",
+    /** Deterministic, template-based reason sentence - never LLM-generated. */
+    reason: (providerName: string, favoriteCount: number, watchedOnlyCount: number) => {
+      if (favoriteCount > 0 && watchedOnlyCount > 0) {
+        return `แนะนำ ${providerName} เพราะมีหนังที่ตรงกับรายการโปรดของคุณ ${favoriteCount} เรื่อง และหนังที่คุณดูแล้ว ${watchedOnlyCount} เรื่อง`;
+      }
+      if (favoriteCount > 0) {
+        return `แนะนำ ${providerName} เพราะมีหนังที่ตรงกับรายการโปรดของคุณ ${favoriteCount} เรื่อง`;
+      }
+      return `แนะนำ ${providerName} เพราะมีหนังที่คุณดูแล้ว ${watchedOnlyCount} เรื่อง`;
+    },
+    matchingMoviesTitle: "หนังที่ตรงกับคุณ",
+    comparisonTitle: "เปรียบเทียบผู้ให้บริการ",
+    otherProvidersTitle: "บริการอื่นที่อาจเหมาะกับคุณ",
+    /** Column/metric label - must always appear next to the percentage, per Phase 3 Part 8. */
+    scoreLabel: "คะแนนความตรงกับความสนใจของคุณ",
+    /** Shown when confidence is "low" (some data, but not much) - hedges without hiding the result. */
+    lowConfidenceHint: "ผลลัพธ์นี้อ้างอิงจากข้อมูลเบื้องต้น ยิ่งเพิ่มหนังที่ชอบ คำแนะนำจะยิ่งแม่นยำขึ้น",
+    emptyState: "เพิ่มหนังที่ชอบเพื่อให้เราช่วยวิเคราะห์บริการที่เหมาะกับคุณ",
+    insufficientState: "เรายังมีข้อมูลไม่พอสำหรับแนะนำบริการที่แม่นยำ",
+    insufficientDetail: (count: number, min: number) => `ตอนนี้คุณมีหนังที่สนใจ ${count} เรื่อง (ต้องการอย่างน้อย ${min} เรื่อง)`,
+    /** All interest movies are TH-unavailable for streaming (may still have rent/buy, which this feature deliberately ignores). */
+    noStreamingMatch: "หนังที่คุณสนใจยังไม่มีให้บริการแบบสตรีมมิ่งในไทยตอนนี้",
+    goToMovies: "ดูหนังทั้งหมด →",
+    goToFavorites: "ไปที่รายการโปรด →",
+    loadError: "ไม่สามารถวิเคราะห์บริการสตรีมมิ่งได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
 } as const;
