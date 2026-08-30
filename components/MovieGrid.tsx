@@ -18,10 +18,16 @@ export function MovieGrid({
   movies,
   emptyMessage = th.movieList.noMoviesFound,
   providersByMovieId,
+  scoresByMovieId,
+  reasonsByMovieId,
 }: {
   movies: TMDBMovie[];
   emptyMessage?: string;
   providersByMovieId?: Record<number, WatchProviderSummary>;
+  /** Phase 4 - personalization match 0-100 per movie id. Omit entirely for non-personalized grids. */
+  scoresByMovieId?: Record<number, number>;
+  /** Phase 4 - resolved Thai reason text per movie id, paired with scoresByMovieId. */
+  reasonsByMovieId?: Record<number, string>;
 }) {
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
@@ -55,6 +61,8 @@ export function MovieGrid({
             isFavorited={favoriteIds.includes(movie.id)}
             onToggleFavorite={() => handleToggleFavorite(movie.id)}
             providers={providersByMovieId?.[movie.id]}
+            matchScore={scoresByMovieId?.[movie.id]}
+            matchReason={reasonsByMovieId?.[movie.id]}
           />
         </li>
       ))}

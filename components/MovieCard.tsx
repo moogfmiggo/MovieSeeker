@@ -45,6 +45,8 @@ export function MovieCard({
   isFavorited,
   onToggleFavorite,
   providers,
+  matchScore,
+  matchReason,
 }: {
   movie: TMDBMovie;
   isWatched: boolean;
@@ -53,6 +55,10 @@ export function MovieCard({
   onToggleFavorite: () => void;
   /** Omitted entirely (not an empty state) when there's no data - see the streaming row below. */
   providers?: WatchProviderSummary;
+  /** Phase 4 Part 7 - "personalization match" 0-100. Omitted entirely outside personalized sections. */
+  matchScore?: number;
+  /** Phase 4 Part 6 - the single strongest reason, already resolved to Thai text. */
+  matchReason?: string;
 }) {
   const { visible: providerBadges, moreCount } = providers
     ? topProvidersForCard(providers)
@@ -130,6 +136,12 @@ export function MovieCard({
       <Link href={`/movies/${movie.id}`} className="mt-2 block">
         <h2 className="line-clamp-2 text-sm font-semibold hover:underline">{movie.title}</h2>
       </Link>
+      {typeof matchScore === "number" && (
+        <span className="mt-1 inline-block w-fit rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">
+          {th.home.matchScore(matchScore)}
+        </span>
+      )}
+      {matchReason && <p className="mt-1 line-clamp-2 text-[11px] opacity-70">{matchReason}</p>}
       <p className="text-xs opacity-60">{formatReleaseDate(movie.release_date)}</p>
       <p className="mt-1 line-clamp-3 text-xs opacity-80">
         {movie.overview ? movie.overview : th.common.noDescription}

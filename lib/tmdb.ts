@@ -239,6 +239,62 @@ export async function getMoviesByCompany(
   });
 }
 
+/**
+ * Fetch TMDB's own "recommendations" for a single movie (TMDB's algorithm,
+ * not filtered by anything in this app). Server-side only. Used both for the
+ * Movie Detail "หนังที่คุณอาจชอบ" section (Phase 4 Part 11) and as a
+ * favorite-similarity signal in the recommendation engine
+ * (lib/recommendations-v2.ts / app/api/recommendations/candidates).
+ */
+export async function getMovieRecommendations(
+  movieId: number,
+  page = 1,
+): Promise<TMDBPopularMoviesResponse> {
+  return tmdbFetch<TMDBPopularMoviesResponse>(`/movie/${movieId}/recommendations`, {
+    language: "en-US",
+    page: String(page),
+  });
+}
+
+export interface DiscoverMoviesParams {
+  genreIds?: number[];
+  directorId?: number;
+  castId?: number;
+  companyId?: number;
+  page?: number;
+}
+
+/**
+ * Generic TMDB discover wrapper used by the recommendation engine to build
+ * targeted candidate pools (by genre, director, cast, or production
+ * company - Phase 4 Part 3). Kept separate from getMoviesByCompany (which
+ * has its own established contract and caller) rather than generalizing it
+ * in place. Server-side only.
+ */
+export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDBPopularMoviesResponse> {
+  const searchParams: Record<string, string> = {
+    language: "en-US",
+    sort_by: "popularity.desc",
+    page: String(params.page ?? 1),
+  };
+  if (params.genreIds && params.genreIds.length > 0) {
+    // Pipe = OR in TMDB's discover syntax - "matches any of these genres",
+    // not "matches all of them" (comma would be AND, and often over-narrows
+    // to near-empty results once 2+ genres are selected).
+    searchParams.with_genres = params.genreIds.join("|");
+  }
+  if (params.directorId !== undefined) {
+    searchParams.with_crew = String(params.directorId);
+  }
+  if (params.castId !== undefined) {
+    searchParams.with_cast = String(params.castId);
+  }
+  if (params.companyId !== undefined) {
+    searchParams.with_companies = String(params.companyId);
+  }
+  return tmdbFetch<TMDBPopularMoviesResponse>("/discover/movie", searchParams);
+}
+
 // Watch-provider catalogs (which service has a title, and in which region)
 // change far less often than the data above, so these are cached via Next's
 // fetch cache instead of refetched on every request.

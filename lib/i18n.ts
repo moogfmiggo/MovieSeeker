@@ -10,6 +10,8 @@
 // asks to keep those in their original form. Only interface chrome (nav,
 // buttons, section labels, empty/error states) lives here.
 
+import type { MatchReason } from "@/lib/recommendations-v2";
+
 export const th = {
   meta: {
     brand: "MovieSeeker",
@@ -45,10 +47,30 @@ export const th = {
     addLabel: (title: string) => `เพิ่ม "${title}" ในรายการโปรด`,
     removeLabel: (title: string) => `นำ "${title}" ออกจากรายการโปรด`,
   },
+  /** Phase 4: personalized discovery homepage (Parts 1, 2, 6, 7, 8). */
   home: {
-    title: "ค้นหาหนังที่ใช่สำหรับคุณ",
-    subtitle: "ค้นพบหนังที่ตรงกับรสนิยมของคุณ",
-    cta: "ค้นหาหนัง",
+    heroEyebrow: "หนังที่เหมาะกับคุณ",
+    popularTitle: "กำลังเป็นที่นิยม",
+    viewDetails: "ดูรายละเอียด →",
+    /** Part 7 - "personalization match", never quality/popularity. */
+    matchScore: (score: number) => `${score}% เหมาะกับคุณ`,
+    // State A - no data at all (Part 2).
+    newUserTitle: "เริ่มต้นค้นหาหนังที่เหมาะกับคุณ",
+    newUserBody: "เลือกแนวหนังที่ชอบและหนังโปรดของคุณ เพื่อให้เราแนะนำหนังที่เหมาะกับคุณได้แม่นยำขึ้น",
+    newUserCta: "เลือกแนวหนังที่ชอบ",
+    // State B - preferences only.
+    preferencesOnlyBody: "เราเลือกหนังจากแนวที่คุณสนใจ",
+    // State C - some favorites/watched, below the "strong" threshold.
+    someInteractionBody: "เราเลือกหนังจากหนังที่คุณชอบและดูไปแล้ว",
+    // State D - built from real favorite-derived genre names, never invented.
+    strongPattern: (genreNames: string[]) => {
+      const names = genreNames.filter(Boolean);
+      if (names.length === 0) return "";
+      if (names.length === 1) return `คุณดูและชอบหนังแนว ${names[0]} หลายเรื่อง`;
+      return `คุณดูและชอบหนังแนว ${names.slice(0, -1).join(", ")} และ ${names[names.length - 1]} หลายเรื่อง`;
+    },
+    noCandidates: "เรายังมีข้อมูลไม่พอสำหรับแนะนำหนังให้คุณตอนนี้ ลองดูหนังยอดนิยมด้านล่างนี้ไปก่อนนะ",
+    loadError: "ไม่สามารถโหลดคำแนะนำหนังได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
   moviesPage: {
     title: "หนังยอดนิยม",
@@ -185,4 +207,41 @@ export const th = {
     goToFavorites: "ไปที่รายการโปรด →",
     loadError: "ไม่สามารถวิเคราะห์บริการสตรีมมิ่งได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
+  /** Phase 4: recommendation engine v2 explanation templates (Part 6). One
+   *  template per lib/recommendations-v2.ts MatchReason variant - never
+   *  LLM-generated, always built from the actual matched signal's data. */
+  recommendationReason: {
+    preferredGenre: (genreName: string) => `เพราะคุณชอบหนังแนว ${genreName}`,
+    favoriteGenre: (genreName: string) => `คุณดูและชอบหนังแนว ${genreName} หลายเรื่อง`,
+    favoriteSimilarity: (favoriteTitle: string) => `คล้ายกับหนังที่คุณ Favorite: ${favoriteTitle}`,
+    directorAffinity: (personName: string) => `มีผู้กำกับเดียวกับหนังที่คุณชอบ: ${personName}`,
+    actorAffinity: (personName: string) => `นักแสดงคนนี้อยู่ในหนังที่คุณ Favorite: ${personName}`,
+    companyAffinity: (companyName: string) => `จากค่ายหนังเดียวกับหนังที่คุณชอบ: ${companyName}`,
+    popular: "กำลังเป็นที่นิยม",
+  },
 } as const;
+
+/**
+ * Turns a single MatchReason into its Thai sentence - the one place that
+ * knows how to render every variant, so components don't each need their
+ * own switch statement. Deterministic, template-based (Part 6) - never
+ * LLM-generated.
+ */
+export function explainMatchReason(reason: MatchReason): string {
+  switch (reason.type) {
+    case "preferredGenre":
+      return th.recommendationReason.preferredGenre(reason.genreName);
+    case "favoriteGenre":
+      return th.recommendationReason.favoriteGenre(reason.genreName);
+    case "favoriteSimilarity":
+      return th.recommendationReason.favoriteSimilarity(reason.favoriteTitle);
+    case "directorAffinity":
+      return th.recommendationReason.directorAffinity(reason.personName);
+    case "actorAffinity":
+      return th.recommendationReason.actorAffinity(reason.personName);
+    case "companyAffinity":
+      return th.recommendationReason.companyAffinity(reason.companyName);
+    case "popular":
+      return th.recommendationReason.popular;
+  }
+}
