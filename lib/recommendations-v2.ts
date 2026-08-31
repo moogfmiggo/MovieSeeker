@@ -20,6 +20,10 @@ export type MatchedSignal =
   | { type: "directorAffinity"; personId: number; personName: string }
   | { type: "actorAffinity"; personId: number; personName: string }
   | { type: "companyAffinity"; companyId: number; companyName: string }
+  /** v3 (Discovery v3 Part 1) - candidate surfaced via a keyword/theme
+   *  discover pool built from the user's favorites. Uses the same
+   *  no-per-candidate-fetch pattern as director/actor/company affinity. */
+  | { type: "keywordAffinity"; keywordId: number; keywordName: string }
   /** Generic provenance (preferred-genre discover, popularity fallback, ...).
    *  Carries no scoring weight of its own - genre/popularity/vote scoring is
    *  derived directly from the candidate's own fields regardless of which
@@ -41,6 +45,7 @@ export type MatchReason =
   | { type: "directorAffinity"; personName: string }
   | { type: "actorAffinity"; personName: string }
   | { type: "companyAffinity"; companyName: string }
+  | { type: "keywordAffinity"; keywordName: string }
   | { type: "popular" };
 
 export interface ScoredMovie {
@@ -69,6 +74,8 @@ export const STRONG_PROFILE_MIN_FAVORITES = 5;
  */
 export const MAX_FAVORITES_FOR_CREDIT_SIGNALS = 10;
 export const MAX_FAVORITES_FOR_SIMILARITY = 5;
+/** v3 - same bound, applied to dismissed movies for negative-genre extraction. */
+export const MAX_DISMISSED_FOR_NEGATIVE_SIGNAL = 10;
 
 export function determineProfileState(input: {
   preferredGenreIds?: readonly number[] | null;
@@ -121,17 +128,25 @@ export function mergeCandidatePools(pools: readonly CandidatePool[] | null | und
 }
 
 // ---------------------------------------------------------------------------
-// Favorite affinity extraction (which directors/actors/companies/genres the
-// user's favorites lean toward - used by the candidates route to decide
-// which discover queries to run, and reusable for single-movie explanations)
+// Affinity extraction (which directors/actors/companies/genres/keywords a
+// set of movies leans toward). Used for BOTH polarities in v3: favorites
+// build a positive AffinityProfile, dismissed movies build a negative one -
+// same pure counting logic either way, so this isn't favorite-specific
+// anymore (renamed from FavoriteSignalSource in v2).
 // ---------------------------------------------------------------------------
 
-export interface FavoriteSignalSource {
+export interface MovieSignalSource {
   genreIds: readonly number[] | null | undefined;
   directors: readonly { id: number; name: string }[] | null | undefined;
   /** Already limited to top-billed by the caller - this module doesn't re-sort billing. */
   topCast: readonly { id: number; name: string }[] | null | undefined;
   companies: readonly { id: number; name: string }[] | null | undefined;
+  /** v3 - keywords/themes (Part 1). Optional: older cached data or a TMDB
+   *  response without append_to_response=keywords simply contributes none.
+   *  Carries names (unlike genreIds) because - unlike genres - there's no
+   *  separate global keyword-name catalog fetched elsewhere to resolve ids
+   *  against later; the name is only ever known at the point of extraction. */
+  keywords?: readonly { id: number; name: string }[] | null;
 }
 
 export interface AffinityProfile {
@@ -140,27 +155,29 @@ export interface AffinityProfile {
   topDirector: { id: number; name: string } | null;
   topActor: { id: number; name: string } | null;
   topCompany: { id: number; name: string } | null;
+  /** v3 - ranked by frequency desc, keyword id asc tie-break. */
+  topKeywords: { id: number; name: string }[];
 }
 
 function topByFrequency<T extends { id: number; name: string }>(
   counts: Map<number, { entry: T; count: number }>,
 ): T | null {
-  let best: { entry: T; count: number } | null = null;
-  for (const candidate of counts.values()) {
-    if (
-      !best ||
-      candidate.count > best.count ||
-      (candidate.count === best.count && candidate.entry.id < best.entry.id)
-    ) {
-      best = candidate;
-    }
-  }
-  return best?.entry ?? null;
+  return rankByFrequency(counts)[0] ?? null;
+}
+
+/** Frequency desc, then entry id asc (deterministic tie-break) - shared by every affinity dimension. */
+function rankByFrequency<T extends { id: number; name: string }>(
+  counts: Map<number, { entry: T; count: number }>,
+): T[] {
+  return [...counts.values()]
+    .sort((a, b) => (b.count !== a.count ? b.count - a.count : a.entry.id - b.entry.id))
+    .map((c) => c.entry);
 }
 
 /** Pure. Never invents affinities - only counts what's actually present in `sources`. */
-export function buildAffinityProfile(sources: readonly FavoriteSignalSource[] | null | undefined): AffinityProfile {
+export function buildAffinityProfile(sources: readonly MovieSignalSource[] | null | undefined): AffinityProfile {
   const genreCounts = new Map<number, number>();
+  const keywordCounts = new Map<number, { entry: { id: number; name: string }; count: number }>();
   const directorCounts = new Map<number, { entry: { id: number; name: string }; count: number }>();
   const actorCounts = new Map<number, { entry: { id: number; name: string }; count: number }>();
   const companyCounts = new Map<number, { entry: { id: number; name: string }; count: number }>();
@@ -171,6 +188,11 @@ export function buildAffinityProfile(sources: readonly FavoriteSignalSource[] | 
       if (typeof gid === "number" && Number.isFinite(gid)) {
         genreCounts.set(gid, (genreCounts.get(gid) ?? 0) + 1);
       }
+    }
+    for (const k of Array.isArray(source.keywords) ? source.keywords : []) {
+      if (!k || typeof k.id !== "number") continue;
+      const prev = keywordCounts.get(k.id);
+      keywordCounts.set(k.id, { entry: { id: k.id, name: k.name }, count: (prev?.count ?? 0) + 1 });
     }
     for (const d of Array.isArray(source.directors) ? source.directors : []) {
       if (!d || typeof d.id !== "number") continue;
@@ -195,6 +217,7 @@ export function buildAffinityProfile(sources: readonly FavoriteSignalSource[] | 
 
   return {
     topGenreIds,
+    topKeywords: rankByFrequency(keywordCounts),
     topDirector: topByFrequency(directorCounts),
     topActor: topByFrequency(actorCounts),
     topCompany: topByFrequency(companyCounts),
@@ -202,25 +225,43 @@ export function buildAffinityProfile(sources: readonly FavoriteSignalSource[] | 
 }
 
 // ---------------------------------------------------------------------------
-// Scoring (Part 4 - explicit ranking model)
+// Scoring (Part 4 - explicit ranking model; rebalanced for Discovery v3 Part 1)
 // ---------------------------------------------------------------------------
-// Internal weights - never exposed to the UI (Part 7). Favorite-derived
-// signals dominate; popularity/vote are small secondary nudges only.
-// Watched movies contribute no scoring weight to *other* candidates - Part 4
-// is explicit that watched is context, not a positive preference, so it's
-// used only for exclusion and for determineProfileState above.
-
-const GENRE_MATCH_POINTS = 12;
-const GENRE_MATCH_MAX_GENRES = 2;
-const FAVORITE_GENRE_POINTS = 10;
-const FAVORITE_SIMILARITY_POINTS = 30;
-const DIRECTOR_AFFINITY_POINTS = 22;
-const ACTOR_AFFINITY_POINTS = 16;
-const COMPANY_AFFINITY_POINTS = 8;
-const POPULARITY_MAX_POINTS = 10;
-const POPULARITY_NORMALIZER = 300;
-const VOTE_MAX_POINTS = 10;
-const MIN_VOTE_COUNT_FOR_VOTE_SIGNAL = 20;
+// Centralized, single source of truth for every point value - never scattered
+// across components, never exposed to the UI (Part 7 / v3 Part 6). Favorite-
+// derived affinity signals (similarity/director/actor/keyword) dominate;
+// genre is deliberately now one of the *smallest* contributors (v3 Part 1:
+// "genres must no longer be the primary signal... genres as a secondary
+// signal") - contrast with v2, where genre and favorite-genre were roughly
+// on par with company affinity. Popularity/vote are small secondary nudges.
+// Watched movies contribute no scoring weight to *other* candidates (Part 4:
+// watched is context, not a positive preference - used only for exclusion
+// and determineProfileState). Dismissed movies now DO contribute a negative
+// genre signal (v3 Part 1/6) - see negativeGenreIds below - but that's the
+// only negative signal implemented so far; see the module-level limitation
+// note further down for why director/actor/company/keyword negative
+// matching isn't included yet.
+export const SCORING_WEIGHTS = {
+  /** Per matching preferred/explicit genre, capped at genreMatchMaxGenres. */
+  genreMatch: 6,
+  genreMatchMaxGenres: 2,
+  /** Per matching genre frequent among the user's favorites but not explicitly preferred. */
+  favoriteGenre: 6,
+  /** A TMDB-recommended-from-favorite hit - the strongest single positive signal (real movie-to-movie similarity, not genre). */
+  favoriteSimilarity: 30,
+  directorAffinity: 22,
+  actorAffinity: 16,
+  companyAffinity: 8,
+  /** v3 - keyword/theme overlap with favorites. Deliberately high: this is the "movie characteristics" signal meant to help replace over-reliance on genre. */
+  keywordAffinity: 20,
+  popularityMax: 8,
+  popularityNormalizer: 300,
+  voteMax: 8,
+  minVoteCountForVoteSignal: 20,
+  /** v3 - per matching genre frequent among the user's dismissed movies, capped at negativeGenreMaxGenres. Always <= 0. */
+  negativeGenre: -10,
+  negativeGenreMaxGenres: 2,
+} as const;
 
 function reasonKey(reason: MatchReason): string {
   switch (reason.type) {
@@ -234,6 +275,8 @@ function reasonKey(reason: MatchReason): string {
       return `${reason.type}:${reason.personName}`;
     case "companyAffinity":
       return `${reason.type}:${reason.companyName}`;
+    case "keywordAffinity":
+      return `${reason.type}:${reason.keywordName}`;
     case "popular":
       return "popular";
   }
@@ -266,53 +309,85 @@ function toPlainMovie(candidate: CandidateMovie): TMDBMovie {
 }
 
 /**
- * Scores a single candidate against the user's preferred genres. Exported
- * for reuse (e.g. explaining a single already-loaded movie on its detail
- * page) as well as being the unit rankRecommendations calls per-candidate.
+ * Scores a single candidate against the user's preferred genres and (v3)
+ * negative-genre affinity. Exported for reuse (e.g. explaining a single
+ * already-loaded movie on its detail page) as well as being the unit
+ * rankRecommendations calls per-candidate.
+ *
+ * KNOWN LIMITATION (v3 Part 1/6, documented per the brief's own instruction
+ * rather than faked): negative director/actor/company/keyword affinity is
+ * NOT implemented. Doing so for an arbitrary candidate (one that wasn't
+ * itself fetched via a director/cast/company/keyword discover pool) would
+ * require fetching that candidate's own credits/keywords - a per-candidate
+ * TMDB call, i.e. real N+1 risk across a 12-24 movie feed (Part 9 explicitly
+ * warns against this). Negative genre works because every candidate already
+ * carries genre_ids for free from any TMDB list/discover response - no
+ * extra fetch needed, the same reason positive genre matching doesn't need
+ * one either.
  */
 export function scoreCandidateMovie(
   candidate: CandidateMovie,
   preferredGenreIds: ReadonlySet<number> | readonly number[] | null | undefined,
   genreMap: Record<number, string> | null | undefined,
+  negativeGenreIds?: ReadonlySet<number> | readonly number[] | null,
 ): ScoredMovie {
   const prefSet = preferredGenreIds instanceof Set ? preferredGenreIds : new Set(preferredGenreIds ?? []);
+  const negativeSet = negativeGenreIds instanceof Set ? negativeGenreIds : new Set(negativeGenreIds ?? []);
   const map = genreMap ?? {};
   const reasons: MatchReason[] = [];
   const seenKeys = new Set<string>();
   let points = 0;
 
   const genreIds = Array.isArray(candidate.genre_ids) ? candidate.genre_ids : [];
+
   let genreMatches = 0;
   for (const gid of genreIds) {
-    if (genreMatches >= GENRE_MATCH_MAX_GENRES) break;
+    if (genreMatches >= SCORING_WEIGHTS.genreMatchMaxGenres) break;
     if (prefSet.has(gid)) {
-      points += GENRE_MATCH_POINTS;
+      points += SCORING_WEIGHTS.genreMatch;
       genreMatches++;
       addReason(reasons, seenKeys, { type: "preferredGenre", genreName: map[gid] ?? String(gid) });
+    }
+  }
+
+  // v3 - negative genre affinity. Silent (no MatchReason - Part 6's
+  // explanations are for why something WAS recommended; a penalty isn't a
+  // "reason to recommend" and Part 6 explicitly warns against unsupported/
+  // fabricated reasons, so this only ever subtracts points, never explains).
+  let negativeGenreMatches = 0;
+  for (const gid of genreIds) {
+    if (negativeGenreMatches >= SCORING_WEIGHTS.negativeGenreMaxGenres) break;
+    if (negativeSet.has(gid)) {
+      points += SCORING_WEIGHTS.negativeGenre;
+      negativeGenreMatches++;
     }
   }
 
   for (const signal of Array.isArray(candidate.matchedSignals) ? candidate.matchedSignals : []) {
     switch (signal.type) {
       case "favoriteGenre":
-        points += FAVORITE_GENRE_POINTS;
+        points += SCORING_WEIGHTS.favoriteGenre;
         addReason(reasons, seenKeys, { type: "favoriteGenre", genreName: map[signal.genreId] ?? String(signal.genreId) });
         break;
       case "favoriteSimilarity":
-        points += FAVORITE_SIMILARITY_POINTS;
+        points += SCORING_WEIGHTS.favoriteSimilarity;
         addReason(reasons, seenKeys, { type: "favoriteSimilarity", favoriteTitle: signal.favoriteTitle });
         break;
       case "directorAffinity":
-        points += DIRECTOR_AFFINITY_POINTS;
+        points += SCORING_WEIGHTS.directorAffinity;
         addReason(reasons, seenKeys, { type: "directorAffinity", personName: signal.personName });
         break;
       case "actorAffinity":
-        points += ACTOR_AFFINITY_POINTS;
+        points += SCORING_WEIGHTS.actorAffinity;
         addReason(reasons, seenKeys, { type: "actorAffinity", personName: signal.personName });
         break;
       case "companyAffinity":
-        points += COMPANY_AFFINITY_POINTS;
+        points += SCORING_WEIGHTS.companyAffinity;
         addReason(reasons, seenKeys, { type: "companyAffinity", companyName: signal.companyName });
+        break;
+      case "keywordAffinity":
+        points += SCORING_WEIGHTS.keywordAffinity;
+        addReason(reasons, seenKeys, { type: "keywordAffinity", keywordName: signal.keywordName });
         break;
       case "discoverPool":
         break;
@@ -320,12 +395,12 @@ export function scoreCandidateMovie(
   }
 
   const popularity = Number.isFinite(candidate.popularity) ? candidate.popularity : 0;
-  points += Math.min(Math.max(popularity, 0) / POPULARITY_NORMALIZER, 1) * POPULARITY_MAX_POINTS;
+  points += Math.min(Math.max(popularity, 0) / SCORING_WEIGHTS.popularityNormalizer, 1) * SCORING_WEIGHTS.popularityMax;
 
   const voteAverage = Number.isFinite(candidate.vote_average) ? candidate.vote_average : 0;
   const voteCount = Number.isFinite(candidate.vote_count) ? candidate.vote_count : 0;
-  if (voteCount >= MIN_VOTE_COUNT_FOR_VOTE_SIGNAL) {
-    points += (Math.min(Math.max(voteAverage, 0), 10) / 10) * VOTE_MAX_POINTS;
+  if (voteCount >= SCORING_WEIGHTS.minVoteCountForVoteSignal) {
+    points += (Math.min(Math.max(voteAverage, 0), 10) / 10) * SCORING_WEIGHTS.voteMax;
   }
 
   if (reasons.length === 0) {
@@ -349,6 +424,10 @@ export interface RankingContext {
   watchedIds?: readonly number[] | null;
   dismissedIds?: readonly number[] | null;
   genreMap?: Record<number, string> | null;
+  /** v3 - genres frequent among the user's dismissed movies. Reduces score
+   *  for candidates sharing them; never excludes on its own (only literal
+   *  dismissed movie ids exclude - see watchedIds/dismissedIds above). */
+  negativeGenreIds?: readonly number[] | null;
 }
 
 /**
@@ -371,6 +450,7 @@ export function rankRecommendations(
   const watchedSet = new Set(Array.isArray(context.watchedIds) ? context.watchedIds : []);
   const dismissedSet = new Set(Array.isArray(context.dismissedIds) ? context.dismissedIds : []);
   const prefSet = new Set(Array.isArray(context.preferredGenreIds) ? context.preferredGenreIds : []);
+  const negativeGenreSet = new Set(Array.isArray(context.negativeGenreIds) ? context.negativeGenreIds : []);
   const genreMap = context.genreMap ?? {};
 
   const byId = new Map<number, CandidateMovie>();
@@ -386,6 +466,6 @@ export function rankRecommendations(
   }
 
   return [...byId.values()]
-    .map((candidate) => scoreCandidateMovie(candidate, prefSet, genreMap))
+    .map((candidate) => scoreCandidateMovie(candidate, prefSet, genreMap, negativeGenreSet))
     .sort((a, b) => (b.score !== a.score ? b.score - a.score : a.movie.id - b.movie.id));
 }

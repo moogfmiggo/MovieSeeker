@@ -217,6 +217,8 @@ export const th = {
     directorAffinity: (personName: string) => `มีผู้กำกับเดียวกับหนังที่คุณชอบ: ${personName}`,
     actorAffinity: (personName: string) => `นักแสดงคนนี้อยู่ในหนังที่คุณ Favorite: ${personName}`,
     companyAffinity: (companyName: string) => `จากค่ายหนังเดียวกับหนังที่คุณชอบ: ${companyName}`,
+    /** v3 - keyword/theme affinity (Discovery v3 Part 1/6). */
+    keywordAffinity: (keywordName: string) => `มีธีม "${keywordName}" คล้ายกับหนังที่คุณชอบ`,
     popular: "กำลังเป็นที่นิยม",
   },
 } as const;
@@ -241,6 +243,8 @@ export function explainMatchReason(reason: MatchReason): string {
       return th.recommendationReason.actorAffinity(reason.personName);
     case "companyAffinity":
       return th.recommendationReason.companyAffinity(reason.companyName);
+    case "keywordAffinity":
+      return th.recommendationReason.keywordAffinity(reason.keywordName);
     case "popular":
       return th.recommendationReason.popular;
   }

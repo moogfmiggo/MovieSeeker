@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getPopularMovies,
+  getMovieById,
   getMovieDetails,
   getMovieRecommendations,
   discoverMovies,
@@ -15,8 +16,9 @@ import {
   buildAffinityProfile,
   MAX_FAVORITES_FOR_CREDIT_SIGNALS,
   MAX_FAVORITES_FOR_SIMILARITY,
+  MAX_DISMISSED_FOR_NEGATIVE_SIGNAL,
   type CandidatePool,
-  type FavoriteSignalSource,
+  type MovieSignalSource,
 } from "@/lib/recommendations-v2";
 import type { TMDBGenre, TMDBMovieDetails } from "@/types/tmdb";
 
@@ -38,6 +40,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const favoriteIds = parseIds(searchParams.get("favoriteIds"));
   const preferredGenreIds = parseIds(searchParams.get("genreIds"));
+  // v3 - additive: omitted entirely, this route behaves exactly as before (no negative signal).
+  const dismissedIds = parseIds(searchParams.get("dismissedIds"));
 
   try {
     // Primary candidate source. Left outside any try/catch on purpose - if
@@ -89,11 +93,12 @@ export async function GET(request: Request) {
       }
 
       if (favoriteDetails.length > 0) {
-        const sources: FavoriteSignalSource[] = favoriteDetails.map((movie) => ({
+        const sources: MovieSignalSource[] = favoriteDetails.map((movie) => ({
           genreIds: movie.genres.map((genre) => genre.id),
           directors: movieDirectors(movie.credits?.crew).map((d) => ({ id: d.id, name: d.name })),
           topCast: topBilledCast(movie.credits?.cast, 5).map((c) => ({ id: c.id, name: c.name })),
           companies: movie.production_companies.map((company) => ({ id: company.id, name: company.name })),
+          keywords: movie.keywords?.keywords ?? [],
         }));
         const affinity = buildAffinityProfile(sources);
         favoriteGenreNames = affinity.topGenreIds
@@ -104,15 +109,18 @@ export async function GET(request: Request) {
         // A favorite-derived genre that isn't already an explicit preference -
         // avoids double-tagging (and double-scoring) the same genre twice.
         const extraGenreId = affinity.topGenreIds.find((id) => !preferredGenreIds.includes(id));
+        // v3 - top favorite-derived keyword/theme, if any keyword data was available.
+        const topKeyword = affinity.topKeywords[0];
 
         const similarityFavoriteIds = recentFavoriteIds.slice(-MAX_FAVORITES_FOR_SIMILARITY);
 
-        const [directorPool, actorPool, companyPool, favoriteGenrePool, ...similarityPools] =
+        const [directorPool, actorPool, companyPool, favoriteGenrePool, keywordPool, ...similarityPools] =
           await Promise.allSettled([
             affinity.topDirector ? discoverMovies({ directorId: affinity.topDirector.id }) : Promise.resolve(null),
             affinity.topActor ? discoverMovies({ castId: affinity.topActor.id }) : Promise.resolve(null),
             affinity.topCompany ? discoverMovies({ companyId: affinity.topCompany.id }) : Promise.resolve(null),
             extraGenreId !== undefined ? discoverMovies({ genreIds: [extraGenreId] }) : Promise.resolve(null),
+            topKeyword ? discoverMovies({ keywordIds: [topKeyword.id] }) : Promise.resolve(null),
             ...similarityFavoriteIds.map((id) => getMovieRecommendations(id)),
           ]);
 
@@ -152,6 +160,15 @@ export async function GET(request: Request) {
           logSoftFailure("favorite-genre discover", favoriteGenrePool.reason);
         }
 
+        if (keywordPool.status === "fulfilled" && keywordPool.value && topKeyword) {
+          pools.push({
+            movies: keywordPool.value.results,
+            signal: { type: "keywordAffinity", keywordId: topKeyword.id, keywordName: topKeyword.name },
+          });
+        } else if (keywordPool.status === "rejected") {
+          logSoftFailure("keyword-affinity discover", keywordPool.reason);
+        }
+
         similarityPools.forEach((result, index) => {
           const favoriteMovieId = similarityFavoriteIds[index];
           const favoriteDetail = favoriteDetails.find((movie) => movie.id === favoriteMovieId);
@@ -167,8 +184,35 @@ export async function GET(request: Request) {
       }
     }
 
+    // v3 - negative genre affinity (Part 1/6). Deliberately lighter than the
+    // favorites path above: getMovieById (not getMovieDetails) since only
+    // genre_ids are needed here, not credits/keywords - see the documented
+    // limitation on lib/recommendations-v2.ts's scoreCandidateMovie for why
+    // negative director/actor/company/keyword matching isn't implemented.
+    let negativeGenreIds: number[] = [];
+    if (dismissedIds.length > 0) {
+      const recentDismissedIds = dismissedIds.slice(-MAX_DISMISSED_FOR_NEGATIVE_SIGNAL);
+      const dismissedSettled = await Promise.allSettled(recentDismissedIds.map((id) => getMovieById(id)));
+      const dismissedSources: MovieSignalSource[] = [];
+      for (const result of dismissedSettled) {
+        if (result.status === "fulfilled") {
+          dismissedSources.push({
+            genreIds: result.value.genre_ids,
+            directors: [],
+            topCast: [],
+            companies: [],
+          });
+        } else {
+          logSoftFailure("dismissed movie genre fetch", result.reason);
+        }
+      }
+      if (dismissedSources.length > 0) {
+        negativeGenreIds = buildAffinityProfile(dismissedSources).topGenreIds.slice(0, 5);
+      }
+    }
+
     const candidates = mergeCandidatePools(pools);
-    return NextResponse.json({ candidates, genreMap, favoriteGenreNames });
+    return NextResponse.json({ candidates, genreMap, favoriteGenreNames, negativeGenreIds });
   } catch (error) {
     if (error instanceof TMDBConfigError) {
       console.error("[recommendations] configuration error:", error.message);

@@ -188,14 +188,15 @@ export async function getMoviesByIds(movieIds: number[]): Promise<TMDBMovie[]> {
 
 /**
  * Fetch full details for one movie, including genres (as objects), runtime,
- * production companies, and top-level cast/crew (via TMDB's
- * append_to_response=credits, so this is a single request). Used by the
- * movie detail page. Server-side only.
+ * production companies, top-level cast/crew, and keywords (via TMDB's
+ * append_to_response=credits,keywords, so this is still a single request).
+ * Used by the movie detail page and by favorite-derived taste extraction
+ * (lib/recommendations-v2.ts). Server-side only.
  */
 export async function getMovieDetails(movieId: number): Promise<TMDBMovieDetails> {
   return tmdbFetch<TMDBMovieDetails>(`/movie/${movieId}`, {
     language: "en-US",
-    append_to_response: "credits",
+    append_to_response: "credits,keywords",
   });
 }
 
@@ -261,15 +262,17 @@ export interface DiscoverMoviesParams {
   directorId?: number;
   castId?: number;
   companyId?: number;
+  /** v3 - keyword/theme-based discovery (Part 1/Part 6 "movie characteristics"). */
+  keywordIds?: number[];
   page?: number;
 }
 
 /**
  * Generic TMDB discover wrapper used by the recommendation engine to build
- * targeted candidate pools (by genre, director, cast, or production
- * company - Phase 4 Part 3). Kept separate from getMoviesByCompany (which
- * has its own established contract and caller) rather than generalizing it
- * in place. Server-side only.
+ * targeted candidate pools (by genre, director, cast, production company, or
+ * keyword/theme - Phase 4 Part 3, extended for Discovery v3 Part 1). Kept
+ * separate from getMoviesByCompany (which has its own established contract
+ * and caller) rather than generalizing it in place. Server-side only.
  */
 export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDBPopularMoviesResponse> {
   const searchParams: Record<string, string> = {
@@ -291,6 +294,9 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
   }
   if (params.companyId !== undefined) {
     searchParams.with_companies = String(params.companyId);
+  }
+  if (params.keywordIds && params.keywordIds.length > 0) {
+    searchParams.with_keywords = params.keywordIds.join("|");
   }
   return tmdbFetch<TMDBPopularMoviesResponse>("/discover/movie", searchParams);
 }

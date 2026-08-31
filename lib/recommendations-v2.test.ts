@@ -12,6 +12,7 @@ import {
   determineProfileState,
   mergeCandidatePools,
   buildAffinityProfile,
+  SCORING_WEIGHTS,
   type CandidateMovie,
   type MatchedSignal,
 } from "./recommendations-v2";
@@ -159,6 +160,114 @@ test("director/actor/company affinity all score higher than a plain candidate, i
   assert.deepEqual(ranked.map((r) => r.movie.id), [1, 2, 3, 4]);
 });
 
+// --- v3 Part 1: keyword/theme affinity ("movie characteristics") ---
+
+test("keywordAffinity signal produces a keywordAffinity reason and awards points", () => {
+  const c = candidate({
+    id: 14,
+    popularity: 0,
+    vote_count: 0,
+    matchedSignals: [{ type: "keywordAffinity", keywordId: 9882, keywordName: "time travel" }],
+  });
+  const [result] = rankRecommendations([c]);
+  assert.ok(result.reasons.some((r) => r.type === "keywordAffinity" && r.keywordName === "time travel"));
+  assert.ok(result.score > 0);
+});
+
+// --- v3 Part 1: genre is now a secondary signal, not primary ---
+
+test("v3 rebalance: a keyword/director/similarity-matched candidate outranks a genre-only match with the same number of matched genres", () => {
+  const genreOnly = candidate({ id: 1, genre_ids: [1, 2], popularity: 0, vote_count: 0 });
+  const keywordMatched = candidate({ id: 2, popularity: 0, vote_count: 0, matchedSignals: [{ type: "keywordAffinity", keywordId: 1, keywordName: "K" }] });
+  const ranked = rankRecommendations([genreOnly, keywordMatched], { preferredGenreIds: [1, 2] });
+  const scoreById = Object.fromEntries(ranked.map((r) => [r.movie.id, r.score]));
+  assert.ok(scoreById[2] > scoreById[1], "keyword affinity should outscore a genre-only match");
+});
+
+test("v3 rebalance: company affinity (the weakest favorite-derived signal) still outscores a single genre match", () => {
+  const genreOnly = candidate({ id: 1, genre_ids: [1], popularity: 0, vote_count: 0 });
+  const companyMatched = candidate({ id: 2, popularity: 0, vote_count: 0, matchedSignals: [{ type: "companyAffinity", companyId: 1, companyName: "C" }] });
+  const ranked = rankRecommendations([genreOnly, companyMatched], { preferredGenreIds: [1] });
+  const scoreById = Object.fromEntries(ranked.map((r) => [r.movie.id, r.score]));
+  assert.ok(scoreById[2] > scoreById[1]);
+});
+
+// --- v3 Part 1/6: negative preference (dismissed-derived) reduces ranking ---
+
+test("negativeGenreIds reduces the score of a candidate matching a dismissed-derived genre", () => {
+  // Both share a baseline positive signal so the penalty is visible above
+  // the "score never goes below 0" floor, rather than both landing on 0.
+  const negativeMatch = candidate({
+    id: 1,
+    genre_ids: [27], // horror - matches the negative signal
+    popularity: 0,
+    vote_count: 0,
+    matchedSignals: [{ type: "companyAffinity", companyId: 1, companyName: "C" }],
+  });
+  const neutral = candidate({
+    id: 2,
+    genre_ids: [99], // documentary - no overlap with the negative signal either way
+    popularity: 0,
+    vote_count: 0,
+    matchedSignals: [{ type: "companyAffinity", companyId: 1, companyName: "C" }],
+  });
+  const ranked = rankRecommendations([negativeMatch, neutral], { negativeGenreIds: [27] });
+  const scoreById = Object.fromEntries(ranked.map((r) => [r.movie.id, r.score]));
+  assert.ok(scoreById[1] < scoreById[2]);
+});
+
+test("negative genre affinity never drops a score below 0, and never adds a MatchReason (penalties aren't explained, only positive matches are)", () => {
+  const c = candidate({ id: 1, genre_ids: [27], popularity: 0, vote_count: 0 });
+  const [result] = rankRecommendations([c], { negativeGenreIds: [27] });
+  assert.ok(result.score >= 0);
+  assert.ok(!result.reasons.some((r) => JSON.stringify(r).toLowerCase().includes("negative")));
+  assert.equal(result.primaryReason.type, "popular"); // no positive signal at all here
+});
+
+test("a strong positive signal still outranks a candidate carrying a negative-genre match", () => {
+  const negativeButFavorited = candidate({
+    id: 1,
+    genre_ids: [27],
+    popularity: 0,
+    vote_count: 0,
+    matchedSignals: [{ type: "favoriteSimilarity", favoriteMovieId: 1, favoriteTitle: "X" }],
+  });
+  const neutral = candidate({ id: 2, popularity: 0, vote_count: 0 });
+  const ranked = rankRecommendations([negativeButFavorited, neutral], { negativeGenreIds: [27] });
+  assert.equal(ranked[0].movie.id, 1); // -10 penalty doesn't erase a +30 similarity match
+});
+
+test("negative genre matching is capped, same as positive genre matching", () => {
+  const twoMatches = candidate({ id: 1, genre_ids: [1, 2], popularity: 0, vote_count: 0 });
+  const threeMatches = candidate({ id: 2, genre_ids: [1, 2, 3], popularity: 0, vote_count: 0 });
+  const ranked = rankRecommendations([twoMatches, threeMatches], { negativeGenreIds: [1, 2, 3] });
+  const scoreById = Object.fromEntries(ranked.map((r) => [r.movie.id, r.score]));
+  assert.equal(scoreById[1], scoreById[2]);
+});
+
+// --- v3 Part 1: centralized, configurable scoring weights ---
+
+test("SCORING_WEIGHTS is centralized (one exported config), not scattered magic numbers", () => {
+  for (const key of [
+    "genreMatch",
+    "favoriteGenre",
+    "favoriteSimilarity",
+    "directorAffinity",
+    "actorAffinity",
+    "companyAffinity",
+    "keywordAffinity",
+    "popularityMax",
+    "voteMax",
+    "negativeGenre",
+  ] as const) {
+    assert.equal(typeof SCORING_WEIGHTS[key], "number", `SCORING_WEIGHTS.${key} should be a configured number`);
+  }
+  assert.ok(SCORING_WEIGHTS.negativeGenre < 0, "negative weight must actually be negative");
+  assert.ok(SCORING_WEIGHTS.genreMatch < SCORING_WEIGHTS.keywordAffinity, "genre must be weighted below the new primary signals (v3 Part 1)");
+  assert.ok(SCORING_WEIGHTS.genreMatch < SCORING_WEIGHTS.directorAffinity);
+  assert.ok(SCORING_WEIGHTS.genreMatch < SCORING_WEIGHTS.favoriteSimilarity);
+});
+
 // --- 9. Popularity as secondary signal ---
 
 test("popularity/vote_average never override a real match - a niche matched movie outranks a hugely popular unrelated one", () => {
@@ -300,8 +409,9 @@ test("score is always an integer clamped 0-100, and ScoredMovie never carries ra
 // --- buildAffinityProfile ---
 
 test("buildAffinityProfile: empty/missing sources never throw, return nulls/empty", () => {
-  assert.deepEqual(buildAffinityProfile([]), { topGenreIds: [], topDirector: null, topActor: null, topCompany: null });
-  assert.deepEqual(buildAffinityProfile(null), { topGenreIds: [], topDirector: null, topActor: null, topCompany: null });
+  const empty = { topGenreIds: [], topKeywords: [], topDirector: null, topActor: null, topCompany: null };
+  assert.deepEqual(buildAffinityProfile([]), empty);
+  assert.deepEqual(buildAffinityProfile(null), empty);
 });
 
 test("buildAffinityProfile: ranks by frequency, deterministic id-ascending tie-break", () => {
@@ -320,4 +430,19 @@ test("buildAffinityProfile: never invents an affinity that isn't actually presen
   assert.equal(profile.topDirector, null);
   assert.equal(profile.topActor, null);
   assert.equal(profile.topCompany, null);
+  assert.deepEqual(profile.topKeywords, []);
+});
+
+// --- v3: keyword/theme affinity (Discovery v3 Part 1) ---
+
+test("buildAffinityProfile: ranks keywords by frequency with names, same tie-break as directors/actors/companies", () => {
+  const sources = [
+    { genreIds: [], directors: [], topCast: [], companies: [], keywords: [{ id: 100, name: "time travel" }] },
+    { genreIds: [], directors: [], topCast: [], companies: [], keywords: [{ id: 100, name: "time travel" }, { id: 200, name: "space" }] },
+  ];
+  const profile = buildAffinityProfile(sources);
+  assert.deepEqual(profile.topKeywords, [
+    { id: 100, name: "time travel" },
+    { id: 200, name: "space" },
+  ]);
 });

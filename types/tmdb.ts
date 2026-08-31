@@ -76,6 +76,15 @@ export interface TMDBMovieDetails {
     cast: TMDBCastMember[];
     crew: TMDBCrewMember[];
   };
+  /** Present when fetched with append_to_response including "keywords". */
+  keywords?: {
+    keywords: TMDBKeyword[];
+  };
+}
+
+export interface TMDBKeyword {
+  id: number;
+  name: string;
 }
 
 export interface TMDBPersonDetails {

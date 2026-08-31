@@ -31,6 +31,8 @@ interface CandidatesResponse {
   candidates: CandidateMovie[];
   genreMap: Record<number, string>;
   favoriteGenreNames: string[];
+  /** v3 - genres frequent among dismissed movies; reduces score, doesn't exclude. */
+  negativeGenreIds: number[];
 }
 
 function isCandidatesResponse(data: unknown): data is CandidatesResponse {
@@ -95,7 +97,7 @@ export function PersonalizedDiscovery() {
         // multi-call TMDB orchestration for a brand-new visitor.
         const [popularRes, candidatesRes] = await Promise.all([
           fetch("/api/tmdb/popular"),
-          profile === "new" ? null : fetch(buildCandidatesUrl(favoriteIds, preferredGenreIds)),
+          profile === "new" ? null : fetch(buildCandidatesUrl(favoriteIds, preferredGenreIds, dismissedIds)),
         ]);
 
         if (!popularRes.ok) throw new Error(`popular request failed with status ${popularRes.status}`);
@@ -114,6 +116,7 @@ export function PersonalizedDiscovery() {
               watchedIds,
               dismissedIds,
               genreMap: candidatesData.genreMap,
+              negativeGenreIds: candidatesData.negativeGenreIds,
             });
             favoriteGenreNames = candidatesData.favoriteGenreNames;
           }
@@ -233,9 +236,10 @@ export function PersonalizedDiscovery() {
   );
 }
 
-function buildCandidatesUrl(favoriteIds: number[], preferredGenreIds: number[]): string {
+function buildCandidatesUrl(favoriteIds: number[], preferredGenreIds: number[], dismissedIds: number[]): string {
   const params = new URLSearchParams();
   if (favoriteIds.length > 0) params.set("favoriteIds", favoriteIds.join(","));
   if (preferredGenreIds.length > 0) params.set("genreIds", preferredGenreIds.join(","));
+  if (dismissedIds.length > 0) params.set("dismissedIds", dismissedIds.join(","));
   return `/api/recommendations/candidates?${params.toString()}`;
 }
