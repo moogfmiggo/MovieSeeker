@@ -57,8 +57,14 @@ export default async function MoviesPage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{th.moviesPage.title}</h1>
-      <p className="mt-1 text-sm opacity-70">{th.moviesPage.subtitle}</p>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+        {selectedGenreIds.length > 0 ? th.moviesPage.filteredTitle : th.moviesPage.title}
+      </h1>
+      <p className="mt-1 text-sm opacity-70">
+        {selectedGenreIds.length > 0
+          ? th.moviesPage.filteredSubtitle(selectedGenreIds.length)
+          : th.moviesPage.subtitle}
+      </p>
       <MovieList
         movies={movies}
         providersByMovieId={providersByMovieId}

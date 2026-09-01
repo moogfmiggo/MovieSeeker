@@ -1,5 +1,5 @@
 import { getMovieGenres, TMDBError } from "@/lib/tmdb";
-import { PreferencesForm } from "@/components/PreferencesForm";
+import { GenreSearchForm } from "@/components/GenreSearchForm";
 import type { TMDBGenre } from "@/types/tmdb";
 import { FALLBACK_GENRES } from "@/lib/genres";
 import { th } from "@/lib/i18n";
@@ -23,7 +23,7 @@ export default async function PreferencesPage() {
       <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{th.preferencesPage.title}</h1>
       <p className="mt-1 text-sm opacity-70">{th.preferencesPage.subtitle}</p>
       <div className="mt-6">
-        <PreferencesForm genres={genres} />
+        <GenreSearchForm genres={genres} />
       </div>
     </main>
   );

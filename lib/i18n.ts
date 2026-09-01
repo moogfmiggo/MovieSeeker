@@ -21,7 +21,7 @@ export const th = {
   },
   nav: {
     movies: "หนัง",
-    preferences: "ตั้งค่าความชอบ",
+    preferences: "ค้นหาตามแนว",
     watched: "ดูแล้ว",
     favorites: "รายการโปรด",
     streaming: "บริการสตรีมมิ่ง",
@@ -55,9 +55,9 @@ export const th = {
     /** Part 7 - "personalization match", never quality/popularity. */
     matchScore: (score: number) => `${score}% เหมาะกับคุณ`,
     // State A - no data at all (Part 2).
-    newUserTitle: "เริ่มต้นค้นหาหนังที่เหมาะกับคุณ",
-    newUserBody: "เลือกแนวหนังที่ชอบและหนังโปรดของคุณ เพื่อให้เราแนะนำหนังที่เหมาะกับคุณได้แม่นยำขึ้น",
-    newUserCta: "เลือกแนวหนังที่ชอบ",
+    newUserTitle: "เริ่มต้นค้นหาหนังที่อยากดู",
+    newUserBody: "เลือกแนวหนังด้านบนเพื่อค้นหาทันที หรือเพิ่มหนังโปรดเพื่อให้คำแนะนำส่วนตัวแม่นยำขึ้น",
+    newUserCta: "เลือกแนวหนังด้านบน",
     // State B - preferences only.
     preferencesOnlyBody: "เราเลือกหนังจากแนวที่คุณสนใจ",
     // State C - some favorites/watched, below the "strong" threshold.
@@ -72,9 +72,19 @@ export const th = {
     noCandidates: "เรายังมีข้อมูลไม่พอสำหรับแนะนำหนังให้คุณตอนนี้ ลองดูหนังยอดนิยมด้านล่างนี้ไปก่อนนะ",
     loadError: "ไม่สามารถโหลดคำแนะนำหนังได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
+  genreSearch: {
+    title: "วันนี้อยากดูหนังแนวไหน?",
+    subtitle: "เลือกได้มากกว่าหนึ่งแนว หนังที่ค้นพบจะต้องตรงครบทุกแนวที่คุณเลือก",
+    noneSelected: "ยังไม่ได้เลือกแนวหนัง",
+    selectedCount: (count: number) => `เลือกแล้ว ${count} แนว`,
+    selectAtLeastOne: "เลือกอย่างน้อย 1 แนวเพื่อค้นหา",
+    search: "ค้นหาหนัง",
+  },
   moviesPage: {
     title: "หนังยอดนิยม",
     subtitle: "ข้อมูลสดจาก TMDB",
+    filteredTitle: "ผลการค้นหาตามแนวหนัง",
+    filteredSubtitle: (count: number) => `แสดงเฉพาะหนังที่ตรงครบทั้ง ${count} แนวที่เลือก`,
   },
   moviesError: {
     title: "ไม่สามารถโหลดหนังได้",
@@ -102,14 +112,8 @@ export const th = {
     loadError: "ไม่สามารถโหลดรายการโปรดได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
   preferencesPage: {
-    title: "ตั้งค่าความชอบ",
-    subtitle: "เลือกแนวหนังที่คุณชอบ เราจะใช้สิ่งนี้เพื่อปรับแต่งคำแนะนำในภายหลัง",
-    noneSelected: "ยังไม่ได้เลือกแนว",
-    selectedCount: (count: number) => `เลือกแล้ว ${count} แนว`,
-    save: "บันทึกความชอบ",
-    saved: "บันทึกความชอบแล้ว",
-    saveError: "ไม่สามารถบันทึกความชอบได้ กรุณาลองใหม่อีกครั้ง",
-    goToMovies: "ดูหนังทั้งหมด →",
+    title: "ค้นหาหนังตามแนว",
+    subtitle: "เลือกแนวที่ต้องการแล้วกดค้นหาได้ทันที",
   },
   movieDetail: {
     overview: "เรื่องย่อ",
