@@ -41,6 +41,32 @@ export function buildMoviesHref(genreIds: unknown): string {
   return normalized.length > 0 ? `/movies?genres=${normalized.join(",")}` : "/movies";
 }
 
+/** Normalizes a TMDB list page to its documented range. */
+export function normalizeMoviePage(raw: unknown): number {
+  const parsed = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return 1;
+  return Math.min(parsed, 500);
+}
+
+/** Builds the server endpoint used to append another page to MovieList. */
+export function buildMovieFeedApiHref(page: unknown, genreIds: unknown): string {
+  const params = new URLSearchParams({ page: String(normalizeMoviePage(page)) });
+  const normalizedGenreIds = normalizeGenreIds(genreIds);
+  if (normalizedGenreIds.length > 0) {
+    params.set("genres", normalizedGenreIds.join(","));
+  }
+  return `/api/tmdb/feed?${params.toString()}`;
+}
+
+/** Appends new movies while preserving order and removing duplicate IDs. */
+export function mergeMoviesById<T extends { id: number }>(
+  current: readonly T[],
+  incoming: readonly T[],
+): T[] {
+  const seen = new Set(current.map((movie) => movie.id));
+  return [...current, ...incoming.filter((movie) => !seen.has(movie.id) && seen.add(movie.id))];
+}
+
 /**
  * Serializes genres using TMDB Discover syntax. A comma means AND (the movie
  * must contain every selected genre); a pipe means OR (any selected genre).

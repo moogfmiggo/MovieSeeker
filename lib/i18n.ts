@@ -21,7 +21,6 @@ export const th = {
   },
   nav: {
     movies: "หนัง",
-    preferences: "ค้นหาตามแนว",
     watched: "ดูแล้ว",
     favorites: "รายการโปรด",
     streaming: "บริการสตรีมมิ่ง",
@@ -54,10 +53,6 @@ export const th = {
     viewDetails: "ดูรายละเอียด →",
     /** Part 7 - "personalization match", never quality/popularity. */
     matchScore: (score: number) => `${score}% เหมาะกับคุณ`,
-    // State A - no data at all (Part 2).
-    newUserTitle: "เริ่มต้นค้นหาหนังที่อยากดู",
-    newUserBody: "เลือกแนวหนังด้านบนเพื่อค้นหาทันที หรือเพิ่มหนังโปรดเพื่อให้คำแนะนำส่วนตัวแม่นยำขึ้น",
-    newUserCta: "เลือกแนวหนังด้านบน",
     // State B - preferences only.
     preferencesOnlyBody: "เราเลือกหนังจากแนวที่คุณสนใจ",
     // State C - some favorites/watched, below the "strong" threshold.
@@ -96,6 +91,9 @@ export const th = {
     noMoviesFound: "ไม่พบหนัง",
     allWatched: "คุณดูหนังทั้งหมดในรายการนี้แล้ว",
     showWatchedToo: "แสดงหนังที่ดูแล้ว",
+    showMore: "แสดงเพิ่มเติม",
+    loadingMore: "กำลังโหลด...",
+    loadMoreError: "โหลดหนังเพิ่มเติมไม่สำเร็จ กรุณาลองอีกครั้ง",
   },
   watchedPage: {
     title: "หนังที่ดูแล้ว",

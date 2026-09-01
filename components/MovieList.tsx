@@ -6,20 +6,50 @@ import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
 import { loadWatched, toggleWatched, filterUnwatched } from "@/lib/watched";
 import { loadFavorites, toggleFavorite } from "@/lib/favorites";
+import { buildMovieFeedApiHref, mergeMoviesById } from "@/lib/movieSearch";
 import { th } from "@/lib/i18n";
+
+interface MovieFeedResponse {
+  results: TMDBMovie[];
+  providers?: Record<number, WatchProviderSummary>;
+  page: number;
+  totalPages: number;
+}
+
+function isMovieFeedResponse(data: unknown): data is MovieFeedResponse {
+  if (!data || typeof data !== "object") return false;
+  const candidate = data as Partial<MovieFeedResponse>;
+  return (
+    Array.isArray(candidate.results) &&
+    typeof candidate.page === "number" &&
+    typeof candidate.totalPages === "number"
+  );
+}
 
 export function MovieList({
   movies,
   providersByMovieId,
   selectedGenreIds = [],
+  initialPage = 1,
+  totalPages = 1,
 }: {
   movies: TMDBMovie[];
   providersByMovieId?: Record<number, WatchProviderSummary>;
   selectedGenreIds?: readonly number[];
+  initialPage?: number;
+  totalPages?: number;
 }) {
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [showWatchedToo, setShowWatchedToo] = useState(false);
+  const [loadedMovies, setLoadedMovies] = useState(movies);
+  const [loadedProviders, setLoadedProviders] = useState<Record<number, WatchProviderSummary>>(
+    providersByMovieId ?? {},
+  );
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [availablePages, setAvailablePages] = useState(totalPages);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
 
   useEffect(() => {
     // Watched/favorite state is browser-local and intentionally restored
@@ -39,12 +69,36 @@ export function MovieList({
     setFavoriteIds(toggleFavorite(movieId));
   }
 
-  if (movies.length === 0) {
-    return <p className="mt-8 text-sm opacity-70">{th.movieList.noMoviesFound}</p>;
+  async function handleShowMore() {
+    if (isLoadingMore || currentPage >= availablePages) return;
+
+    setIsLoadingMore(true);
+    setLoadMoreFailed(false);
+    try {
+      const response = await fetch(
+        buildMovieFeedApiHref(currentPage + 1, selectedGenreIds),
+      );
+      if (!response.ok) throw new Error(`movie feed failed with status ${response.status}`);
+
+      const data: unknown = await response.json();
+      if (!isMovieFeedResponse(data)) throw new Error("invalid movie feed response");
+
+      setLoadedMovies((current) => mergeMoviesById(current, data.results));
+      setLoadedProviders((current) => ({ ...current, ...(data.providers ?? {}) }));
+      setCurrentPage(data.page);
+      setAvailablePages(data.totalPages);
+    } catch {
+      setLoadMoreFailed(true);
+    } finally {
+      setIsLoadingMore(false);
+    }
   }
 
-  const visibleMovies = showWatchedToo ? movies : filterUnwatched(movies, watchedIds);
+  const visibleMovies = showWatchedToo
+    ? loadedMovies
+    : filterUnwatched(loadedMovies, watchedIds);
   const allWatched = visibleMovies.length === 0 && !showWatchedToo;
+  const hasMore = currentPage < availablePages;
 
   return (
     <div className="mt-6">
@@ -54,7 +108,9 @@ export function MovieList({
         </p>
       )}
 
-      {allWatched ? (
+      {loadedMovies.length === 0 ? (
+        <p className="text-sm opacity-70">{th.movieList.noMoviesFound}</p>
+      ) : allWatched ? (
         <div className="rounded-lg border border-border p-6 text-center text-sm">
           <p>{th.movieList.allWatched}</p>
           <button
@@ -75,11 +131,30 @@ export function MovieList({
                 onToggleWatched={() => handleToggleWatched(movie.id)}
                 isFavorited={favoriteIds.includes(movie.id)}
                 onToggleFavorite={() => handleToggleFavorite(movie.id)}
-                providers={providersByMovieId?.[movie.id]}
+                providers={loadedProviders[movie.id]}
               />
             </li>
           ))}
         </ul>
+      )}
+
+      {loadMoreFailed && (
+        <p className="mt-5 text-center text-sm text-red-400" role="alert">
+          {th.movieList.loadMoreError}
+        </p>
+      )}
+
+      {hasMore && (
+        <div className="mt-8 text-center">
+          <button
+            type="button"
+            onClick={handleShowMore}
+            disabled={isLoadingMore}
+            className="rounded-full border border-accent px-7 py-3 text-sm font-semibold text-accent transition hover:bg-accent hover:text-accent-foreground disabled:cursor-wait disabled:opacity-60"
+          >
+            {isLoadingMore ? th.movieList.loadingMore : th.movieList.showMore}
+          </button>
+        </div>
       )}
     </div>
   );

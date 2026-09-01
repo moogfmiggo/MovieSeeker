@@ -153,21 +153,7 @@ export function PersonalizedDiscovery() {
   );
 
   if (profileState === "new") {
-    return (
-      <div className="flex flex-col gap-10">
-        <div className="rounded-xl border border-accent/50 bg-surface p-8 text-center sm:p-12">
-          <h1 className="text-xl font-bold sm:text-2xl">{th.home.newUserTitle}</h1>
-          <p className="mx-auto mt-2 max-w-md text-sm opacity-70">{th.home.newUserBody}</p>
-          <Link
-            href="#genre-search"
-            className="mt-5 inline-block rounded-full bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition hover:bg-accent-hover"
-          >
-            {th.home.newUserCta}
-          </Link>
-        </div>
-        {popularSection}
-      </div>
-    );
+    return popularSection;
   }
 
   if (ranked.length === 0) {

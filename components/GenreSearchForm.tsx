@@ -6,9 +6,17 @@ import type { TMDBGenre } from "@/types/tmdb";
 import { buildMoviesHref } from "@/lib/movieSearch";
 import { th } from "@/lib/i18n";
 
-export function GenreSearchForm({ genres }: { genres: TMDBGenre[] }) {
+export function GenreSearchForm({
+  genres,
+  initialSelectedGenreIds = [],
+}: {
+  genres: TMDBGenre[];
+  initialSelectedGenreIds?: readonly number[];
+}) {
   const router = useRouter();
-  const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
+  const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>(() => [
+    ...initialSelectedGenreIds,
+  ]);
 
   function toggleGenre(id: number) {
     setSelectedGenreIds((current) =>

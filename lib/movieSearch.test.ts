@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildMovieFeedApiHref,
   buildMoviesHref,
   filterMoviesByAllGenres,
+  mergeMoviesById,
   movieMatchesAllGenres,
+  normalizeMoviePage,
   normalizeGenreIds,
   serializeDiscoverGenres,
 } from "./movieSearch";
@@ -15,6 +18,27 @@ test("normalizeGenreIds parses URL values, removes invalid IDs, and de-duplicate
 test("buildMoviesHref carries explicit genre search intent to the server page", () => {
   assert.equal(buildMoviesHref([10752, 99]), "/movies?genres=10752,99");
   assert.equal(buildMoviesHref([]), "/movies");
+});
+
+test("buildMovieFeedApiHref keeps page and AND-search genres in the request", () => {
+  assert.equal(
+    buildMovieFeedApiHref(2, [10752, 99]),
+    "/api/tmdb/feed?page=2&genres=10752%2C99",
+  );
+});
+
+test("normalizeMoviePage rejects invalid values and caps TMDB pages", () => {
+  assert.equal(normalizeMoviePage("2"), 2);
+  assert.equal(normalizeMoviePage("bad"), 1);
+  assert.equal(normalizeMoviePage(0), 1);
+  assert.equal(normalizeMoviePage(999), 500);
+});
+
+test("mergeMoviesById appends only unseen movies in response order", () => {
+  assert.deepEqual(
+    mergeMoviesById([{ id: 1 }, { id: 2 }], [{ id: 2 }, { id: 3 }, { id: 3 }, { id: 4 }]),
+    [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
+  );
 });
 
 test("serializeDiscoverGenres uses comma for all/AND and pipe for any/OR", () => {

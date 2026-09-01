@@ -1,9 +1,18 @@
-import { discoverMovies, getPopularMovies, getWatchProvidersForMovies } from "@/lib/tmdb";
+import {
+  discoverMovies,
+  getMovieGenres,
+  getPopularMovies,
+  getWatchProvidersForMovies,
+  TMDBError,
+} from "@/lib/tmdb";
 import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { withTimeoutFallback } from "@/lib/timeout";
 import { filterMoviesByAllGenres, normalizeGenreIds } from "@/lib/movieSearch";
 import { MovieList } from "@/components/MovieList";
+import { GenreSearchPanel } from "@/components/GenreSearchPanel";
+import { FALLBACK_GENRES } from "@/lib/genres";
 import { th } from "@/lib/i18n";
+import type { TMDBGenre, TMDBPopularMoviesResponse } from "@/types/tmdb";
 
 // Always fetch live from TMDB at request time — never prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -19,7 +28,8 @@ export default async function MoviesPage({
   searchParams: Promise<{ genres?: string | string[] }>;
 }) {
   const selectedGenreIds = normalizeGenreIds((await searchParams).genres);
-  let movies;
+  let movieData: TMDBPopularMoviesResponse;
+  let genres: TMDBGenre[];
 
   try {
     if (selectedGenreIds.length > 0) {
@@ -27,10 +37,12 @@ export default async function MoviesPage({
         genreIds: selectedGenreIds,
         genreMatch: "all",
       });
-      movies = filterMoviesByAllGenres(data.results, selectedGenreIds);
+      movieData = {
+        ...data,
+        results: filterMoviesByAllGenres(data.results, selectedGenreIds),
+      };
     } else {
-      const data = await getPopularMovies();
-      movies = data.results;
+      movieData = await getPopularMovies();
     }
   } catch (error) {
     // Full detail (still token-free) goes to server logs only. The client
@@ -41,6 +53,18 @@ export default async function MoviesPage({
     );
     throw new Error("Unable to load movies right now.");
   }
+
+  try {
+    genres = (await getMovieGenres()).genres;
+  } catch (error) {
+    console.error(
+      "[movies] live TMDB genre fetch unavailable, using fallback list:",
+      error instanceof TMDBError ? error.message : "unknown error",
+    );
+    genres = FALLBACK_GENRES;
+  }
+
+  const movies = movieData.results;
 
   // Never throws on its own (see getWatchProvidersForMovies) - a provider
   // lookup failure for one or all movies just means no badges are shown.
@@ -57,19 +81,26 @@ export default async function MoviesPage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-        {selectedGenreIds.length > 0 ? th.moviesPage.filteredTitle : th.moviesPage.title}
-      </h1>
-      <p className="mt-1 text-sm opacity-70">
-        {selectedGenreIds.length > 0
-          ? th.moviesPage.filteredSubtitle(selectedGenreIds.length)
-          : th.moviesPage.subtitle}
-      </p>
-      <MovieList
-        movies={movies}
-        providersByMovieId={providersByMovieId}
-        selectedGenreIds={selectedGenreIds}
-      />
+      <GenreSearchPanel genres={genres} initialSelectedGenreIds={selectedGenreIds} />
+
+      <section className="mt-10">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          {selectedGenreIds.length > 0 ? th.moviesPage.filteredTitle : th.moviesPage.title}
+        </h1>
+        <p className="mt-1 text-sm opacity-70">
+          {selectedGenreIds.length > 0
+            ? th.moviesPage.filteredSubtitle(selectedGenreIds.length)
+            : th.moviesPage.subtitle}
+        </p>
+        <MovieList
+          key={selectedGenreIds.join(",") || "popular"}
+          movies={movies}
+          providersByMovieId={providersByMovieId}
+          selectedGenreIds={selectedGenreIds}
+          initialPage={movieData.page}
+          totalPages={movieData.total_pages}
+        />
+      </section>
     </main>
   );
 }

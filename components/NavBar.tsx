@@ -12,9 +12,6 @@ export function NavBar() {
           <Link href="/movies" className="text-muted transition hover:text-foreground">
             {th.nav.movies}
           </Link>
-          <Link href="/#genre-search" className="text-muted transition hover:text-foreground">
-            {th.nav.preferences}
-          </Link>
           <Link href="/watched" className="text-muted transition hover:text-foreground">
             {th.nav.watched}
           </Link>
