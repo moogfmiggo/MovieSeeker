@@ -71,17 +71,19 @@ export const th = {
   },
   genreSearch: {
     title: "วันนี้อยากดูหนังแนวไหน?",
-    subtitle: "เลือกได้มากกว่าหนึ่งแนว หนังที่ค้นพบจะต้องตรงครบทุกแนวที่คุณเลือก",
-    noneSelected: "ยังไม่ได้เลือกแนวหนัง",
-    selectedCount: (count: number) => `เลือกแล้ว ${count} แนว`,
-    selectAtLeastOne: "เลือกอย่างน้อย 1 แนวเพื่อค้นหา",
+    subtitle: "เลือกได้ทั้งแนวหลักและธีม หนังที่ค้นพบจะต้องตรงครบทุกหัวข้อที่คุณเลือก",
+    mainGenres: "แนวหลัก",
+    moreTopics: "แนวย่อยและธีมเพิ่มเติม",
+    noneSelected: "ยังไม่ได้เลือกแนวหรือธีมหนัง",
+    selectedCount: (count: number) => `เลือกแล้ว ${count} หัวข้อ`,
+    selectAtLeastOne: "เลือกอย่างน้อย 1 หัวข้อเพื่อค้นหา",
     search: "ค้นหาหนัง",
   },
   moviesPage: {
     title: "หนังยอดนิยม",
     subtitle: "ข้อมูลสดจาก TMDB",
-    filteredTitle: "ผลการค้นหาตามแนวหนัง",
-    filteredSubtitle: (count: number) => `แสดงเฉพาะหนังที่ตรงครบทั้ง ${count} แนวที่เลือก`,
+    filteredTitle: "ผลการค้นหาตามแนวและธีม",
+    filteredSubtitle: (count: number) => `แสดงเฉพาะหนังที่ตรงครบทั้ง ${count} หัวข้อที่เลือก`,
   },
   moviesError: {
     title: "ไม่สามารถโหลดหนังได้",
@@ -89,7 +91,7 @@ export const th = {
   },
   movieList: {
     recommendedForYou: "แนะนำสำหรับคุณบนสตรีมมิ่ง",
-    matchesAllSelectedGenres: "หนังที่ตรงกับทุกแนวที่คุณเลือก",
+    matchesAllSelectedGenres: "หนังที่ตรงกับทุกแนวและธีมที่คุณเลือก",
     noMoviesFound: "ไม่พบหนัง",
     allWatched: "คุณดูหนังทั้งหมดในรายการนี้แล้ว",
     showWatchedToo: "แสดงหนังที่ดูแล้ว",
@@ -112,8 +114,8 @@ export const th = {
     loadError: "ไม่สามารถโหลดรายการโปรดได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
   preferencesPage: {
-    title: "ค้นหาหนังตามแนว",
-    subtitle: "เลือกแนวที่ต้องการแล้วกดค้นหาได้ทันที",
+    title: "ค้นหาหนังตามแนวและธีม",
+    subtitle: "เลือกแนวหรือธีมที่ต้องการแล้วกดค้นหาได้ทันที",
   },
   movieDetail: {
     overview: "เรื่องย่อ",

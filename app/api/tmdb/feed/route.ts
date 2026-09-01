@@ -3,6 +3,7 @@ import {
   discoverMovies,
   getPopularMovies,
   getWatchProvidersForMovies,
+  resolveMovieTopicKeywordIds,
   TMDBConfigError,
   TMDBError,
 } from "@/lib/tmdb";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/movieSearch";
 import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { withTimeoutFallback } from "@/lib/timeout";
+import { normalizeTopicSlugs } from "@/lib/movieTopics";
 
 export const dynamic = "force-dynamic";
 
@@ -21,19 +23,24 @@ const WATCH_PROVIDERS_TIMEOUT_MS = 3000;
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const selectedGenreIds = normalizeGenreIds(searchParams.get("genres"));
+  const selectedTopicSlugs = normalizeTopicSlugs(searchParams.get("topics"));
+  const hasFilters = selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0;
   const requestedPage = normalizeMoviePage(searchParams.get("page"));
 
   try {
+    const keywordIds = await resolveMovieTopicKeywordIds(selectedTopicSlugs);
     const data =
-      selectedGenreIds.length > 0
+      hasFilters
         ? await discoverMovies({
             genreIds: selectedGenreIds,
             genreMatch: "all",
+            keywordIds,
+            keywordMatch: "all",
             page: requestedPage,
           })
         : await getPopularMovies(requestedPage);
     const movies =
-      selectedGenreIds.length > 0
+      hasFilters
         ? filterMoviesByAllGenres(data.results, selectedGenreIds)
         : data.results;
     const rawProviders = await withTimeoutFallback(

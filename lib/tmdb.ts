@@ -6,6 +6,7 @@
 import type {
   TMDBCompanyDetails,
   TMDBGenreListResponse,
+  TMDBKeywordSearchResponse,
   TMDBMovie,
   TMDBMovieDetails,
   TMDBPersonDetails,
@@ -16,6 +17,7 @@ import type {
 import { serializeDiscoverGenres, type GenreMatchMode } from "@/lib/movieSearch";
 import { withTimeoutFallback } from "@/lib/timeout";
 import { DEFAULT_WATCH_REGION } from "@/lib/watchProviders";
+import { getMovieTopic, normalizeTopicSlugs } from "@/lib/movieTopics";
 import {
   mergeLocalizedMoviePage,
   mergeLocalizedMovies,
@@ -116,6 +118,7 @@ async function tmdbFetch<T>(
  *  forcing a fresh TMDB round-trip on every single /movies visit. */
 const POPULAR_MOVIES_REVALIDATE_SECONDS = 90;
 const DISCOVERY_REVALIDATE_SECONDS = 60 * 5;
+const KEYWORD_SEARCH_REVALIDATE_SECONDS = 60 * 60 * 24;
 
 async function fetchThaiFirstMoviePage(
   path: string,
@@ -294,6 +297,33 @@ export async function getMovieDetails(movieId: number): Promise<TMDBMovieDetails
   return mergeLocalizedMovieText(thai, english);
 }
 
+/** Resolves curated topic slugs to TMDB keyword IDs, cached for one day. */
+export async function resolveMovieTopicKeywordIds(topicSlugs: unknown): Promise<number[]> {
+  const topics = normalizeTopicSlugs(topicSlugs)
+    .map((slug) => getMovieTopic(slug))
+    .filter((topic) => topic !== undefined);
+
+  const keywordIds = await Promise.all(
+    topics.map(async (topic) => {
+      const data = await tmdbFetch<TMDBKeywordSearchResponse>(
+        "/search/keyword",
+        { query: topic.keywordQuery, page: "1" },
+        { revalidateSeconds: KEYWORD_SEARCH_REVALIDATE_SECONDS },
+      );
+      const exact = data.results.find(
+        (keyword) => keyword.name.trim().toLowerCase() === topic.keywordQuery.toLowerCase(),
+      );
+      const match = exact ?? data.results[0];
+      if (!match) {
+        throw new TMDBError(`TMDB keyword was not found for curated topic: ${topic.slug}.`);
+      }
+      return match.id;
+    }),
+  );
+
+  return [...new Set(keywordIds)];
+}
+
 /** Fetch a person's profile (name, photo, known-for department, bio). Server-side only. */
 export async function getPersonDetails(personId: number): Promise<TMDBPersonDetails> {
   const thai = await tmdbFetch<TMDBPersonDetails>(`/person/${personId}`, {
@@ -389,6 +419,8 @@ export interface DiscoverMoviesParams {
   companyId?: number;
   /** v3 - keyword/theme-based discovery (Part 1/Part 6 "movie characteristics"). */
   keywordIds?: number[];
+  /** Defaults to "any" for recommendation pools; explicit search uses "all". */
+  keywordMatch?: GenreMatchMode;
   /** Restricts candidates to subscription/free/ad-supported streaming in this region. */
   streamingRegion?: string;
   page?: number;
@@ -424,7 +456,10 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
     searchParams.with_companies = String(params.companyId);
   }
   if (params.keywordIds && params.keywordIds.length > 0) {
-    searchParams.with_keywords = params.keywordIds.join("|");
+    searchParams.with_keywords = serializeDiscoverGenres(
+      params.keywordIds,
+      params.keywordMatch ?? "any",
+    );
   }
   if (params.streamingRegion) {
     searchParams.watch_region = params.streamingRegion;

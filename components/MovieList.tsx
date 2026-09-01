@@ -30,12 +30,14 @@ export function MovieList({
   movies,
   providersByMovieId,
   selectedGenreIds = [],
+  selectedTopicSlugs = [],
   initialPage = 1,
   totalPages = 1,
 }: {
   movies: TMDBMovie[];
   providersByMovieId?: Record<number, WatchProviderSummary>;
   selectedGenreIds?: readonly number[];
+  selectedTopicSlugs?: readonly string[];
   initialPage?: number;
   totalPages?: number;
 }) {
@@ -53,7 +55,7 @@ export function MovieList({
 
   useEffect(() => {
     // Watched/favorite state is browser-local and intentionally restored
-    // after hydration. Genre filtering already happened on the server from
+    // after hydration. Genre/topic filtering already happened on the server from
     // the URL's explicit search intent, so it must not be replaced here by
     // a soft client-side reorder of a Popular pool.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -76,7 +78,7 @@ export function MovieList({
     setLoadMoreFailed(false);
     try {
       const response = await fetch(
-        buildMovieFeedApiHref(currentPage + 1, selectedGenreIds),
+        buildMovieFeedApiHref(currentPage + 1, selectedGenreIds, selectedTopicSlugs),
       );
       if (!response.ok) throw new Error(`movie feed failed with status ${response.status}`);
 
@@ -102,7 +104,7 @@ export function MovieList({
 
   return (
     <div className="mt-6">
-      {selectedGenreIds.length > 0 && (
+      {(selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0) && (
         <p className="mb-3 text-sm font-medium text-accent">
           {th.movieList.matchesAllSelectedGenres}
         </p>

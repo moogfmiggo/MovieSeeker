@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildMovieFeedApiHref,
+  buildMovieSearchHref,
   buildMoviesHref,
   filterMoviesByAllGenres,
   mergeMoviesById,
@@ -20,10 +21,17 @@ test("buildMoviesHref carries explicit genre search intent to the server page", 
   assert.equal(buildMoviesHref([]), "/movies");
 });
 
+test("buildMovieSearchHref carries official genres and curated topics", () => {
+  assert.equal(
+    buildMovieSearchHref([878], ["time-travel", "space"]),
+    "/movies?genres=878&topics=time-travel,space",
+  );
+});
+
 test("buildMovieFeedApiHref keeps page and AND-search genres in the request", () => {
   assert.equal(
-    buildMovieFeedApiHref(2, [10752, 99]),
-    "/api/tmdb/feed?page=2&genres=10752%2C99",
+    buildMovieFeedApiHref(2, [10752, 99], ["true-story"]),
+    "/api/tmdb/feed?page=2&genres=10752%2C99&topics=true-story",
   );
 });
 

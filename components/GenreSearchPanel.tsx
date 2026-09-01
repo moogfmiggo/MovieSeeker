@@ -5,11 +5,13 @@ import type { TMDBGenre } from "@/types/tmdb";
 export function GenreSearchPanel({
   genres,
   initialSelectedGenreIds = [],
+  initialSelectedTopicSlugs = [],
 }: {
   genres: TMDBGenre[];
   initialSelectedGenreIds?: readonly number[];
+  initialSelectedTopicSlugs?: readonly string[];
 }) {
-  const selectionKey = initialSelectedGenreIds.join(",") || "none";
+  const selectionKey = `${initialSelectedGenreIds.join(",")}|${initialSelectedTopicSlugs.join(",")}`;
 
   return (
     <section
@@ -23,6 +25,7 @@ export function GenreSearchPanel({
           key={selectionKey}
           genres={genres}
           initialSelectedGenreIds={initialSelectedGenreIds}
+          initialSelectedTopicSlugs={initialSelectedTopicSlugs}
         />
       </div>
     </section>

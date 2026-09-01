@@ -87,6 +87,13 @@ export interface TMDBKeyword {
   name: string;
 }
 
+export interface TMDBKeywordSearchResponse {
+  page: number;
+  results: TMDBKeyword[];
+  total_pages: number;
+  total_results: number;
+}
+
 export interface TMDBPersonDetails {
   id: number;
   name: string;

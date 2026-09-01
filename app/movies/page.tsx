@@ -3,11 +3,13 @@ import {
   getMovieGenres,
   getPopularMovies,
   getWatchProvidersForMovies,
+  resolveMovieTopicKeywordIds,
   TMDBError,
 } from "@/lib/tmdb";
 import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { withTimeoutFallback } from "@/lib/timeout";
 import { filterMoviesByAllGenres, normalizeGenreIds } from "@/lib/movieSearch";
+import { normalizeTopicSlugs } from "@/lib/movieTopics";
 import { MovieList } from "@/components/MovieList";
 import { GenreSearchPanel } from "@/components/GenreSearchPanel";
 import { FALLBACK_GENRES } from "@/lib/genres";
@@ -25,17 +27,27 @@ const WATCH_PROVIDERS_TIMEOUT_MS = 3000;
 export default async function MoviesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ genres?: string | string[] }>;
+  searchParams: Promise<{
+    genres?: string | string[];
+    topics?: string | string[];
+  }>;
 }) {
-  const selectedGenreIds = normalizeGenreIds((await searchParams).genres);
+  const currentSearch = await searchParams;
+  const selectedGenreIds = normalizeGenreIds(currentSearch.genres);
+  const selectedTopicSlugs = normalizeTopicSlugs(currentSearch.topics);
+  const selectedFilterCount = selectedGenreIds.length + selectedTopicSlugs.length;
+  const hasFilters = selectedFilterCount > 0;
   let movieData: TMDBPopularMoviesResponse;
   let genres: TMDBGenre[];
 
   try {
-    if (selectedGenreIds.length > 0) {
+    if (hasFilters) {
+      const keywordIds = await resolveMovieTopicKeywordIds(selectedTopicSlugs);
       const data = await discoverMovies({
         genreIds: selectedGenreIds,
         genreMatch: "all",
+        keywordIds,
+        keywordMatch: "all",
       });
       movieData = {
         ...data,
@@ -81,22 +93,27 @@ export default async function MoviesPage({
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
-      <GenreSearchPanel genres={genres} initialSelectedGenreIds={selectedGenreIds} />
+      <GenreSearchPanel
+        genres={genres}
+        initialSelectedGenreIds={selectedGenreIds}
+        initialSelectedTopicSlugs={selectedTopicSlugs}
+      />
 
       <section className="mt-10">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          {selectedGenreIds.length > 0 ? th.moviesPage.filteredTitle : th.moviesPage.title}
+          {hasFilters ? th.moviesPage.filteredTitle : th.moviesPage.title}
         </h1>
         <p className="mt-1 text-sm opacity-70">
-          {selectedGenreIds.length > 0
-            ? th.moviesPage.filteredSubtitle(selectedGenreIds.length)
+          {hasFilters
+            ? th.moviesPage.filteredSubtitle(selectedFilterCount)
             : th.moviesPage.subtitle}
         </p>
         <MovieList
-          key={selectedGenreIds.join(",") || "popular"}
+          key={`${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}`}
           movies={movies}
           providersByMovieId={providersByMovieId}
           selectedGenreIds={selectedGenreIds}
+          selectedTopicSlugs={selectedTopicSlugs}
           initialPage={movieData.page}
           totalPages={movieData.total_pages}
         />

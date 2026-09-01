@@ -1,4 +1,5 @@
 import type { TMDBMovie } from "../types/tmdb";
+import { normalizeTopicSlugs } from "./movieTopics";
 
 /** TMDB supports at most a small, useful set of simultaneous genre filters. */
 const MAX_SELECTED_GENRES = 10;
@@ -37,8 +38,17 @@ export function normalizeGenreIds(raw: unknown): number[] {
 
 /** Builds the explicit search-intent URL used by Preferences → Movies. */
 export function buildMoviesHref(genreIds: unknown): string {
-  const normalized = normalizeGenreIds(genreIds);
-  return normalized.length > 0 ? `/movies?genres=${normalized.join(",")}` : "/movies";
+  return buildMovieSearchHref(genreIds, []);
+}
+
+/** Builds a search URL carrying both official genres and keyword-backed topics. */
+export function buildMovieSearchHref(genreIds: unknown, topicSlugs: unknown): string {
+  const normalizedGenres = normalizeGenreIds(genreIds);
+  const normalizedTopics = normalizeTopicSlugs(topicSlugs);
+  const queryParts: string[] = [];
+  if (normalizedGenres.length > 0) queryParts.push(`genres=${normalizedGenres.join(",")}`);
+  if (normalizedTopics.length > 0) queryParts.push(`topics=${normalizedTopics.join(",")}`);
+  return queryParts.length > 0 ? `/movies?${queryParts.join("&")}` : "/movies";
 }
 
 /** Normalizes a TMDB list page to its documented range. */
@@ -49,11 +59,19 @@ export function normalizeMoviePage(raw: unknown): number {
 }
 
 /** Builds the server endpoint used to append another page to MovieList. */
-export function buildMovieFeedApiHref(page: unknown, genreIds: unknown): string {
+export function buildMovieFeedApiHref(
+  page: unknown,
+  genreIds: unknown,
+  topicSlugs: unknown = [],
+): string {
   const params = new URLSearchParams({ page: String(normalizeMoviePage(page)) });
   const normalizedGenreIds = normalizeGenreIds(genreIds);
+  const normalizedTopics = normalizeTopicSlugs(topicSlugs);
   if (normalizedGenreIds.length > 0) {
     params.set("genres", normalizedGenreIds.join(","));
+  }
+  if (normalizedTopics.length > 0) {
+    params.set("topics", normalizedTopics.join(","));
   }
   return `/api/tmdb/feed?${params.toString()}`;
 }
