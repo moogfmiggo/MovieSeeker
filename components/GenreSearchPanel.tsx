@@ -14,10 +14,10 @@ export function GenreSearchPanel({
   return (
     <section
       id="genre-search"
-      className="scroll-mt-24 rounded-xl border border-accent/50 bg-surface p-6 sm:p-8"
+      className="scroll-mt-24 w-full rounded-xl border border-accent/50 bg-surface p-6 sm:p-10"
     >
       <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{th.genreSearch.title}</h1>
-      <p className="mt-2 max-w-2xl text-sm opacity-70">{th.genreSearch.subtitle}</p>
+      <p className="mt-2 max-w-3xl text-sm opacity-70">{th.genreSearch.subtitle}</p>
       <div className="mt-6">
         <GenreSearchForm
           key={selectionKey}

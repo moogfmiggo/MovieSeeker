@@ -26,6 +26,7 @@ const BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/w1280";
 // not dozens of rows.
 const FOR_YOU_GRID_SIZE = 9;
 const DISCOVERY_ROW_SIZE = 6;
+const NOW_PLAYING_ROW_SIZE = 5;
 
 type Status = "loading" | "ready" | "error";
 
@@ -218,15 +219,15 @@ export function PersonalizedDiscovery() {
     <div>
       <h2 className="text-lg font-semibold">{th.home.nowPlayingTitle}</h2>
       <p className="mt-1 text-sm opacity-60">{th.home.nowPlayingSubtitle}</p>
-      <MovieGrid movies={nowPlayingMovies.slice(0, DISCOVERY_ROW_SIZE)} />
+      <MovieGrid movies={nowPlayingMovies.slice(0, NOW_PLAYING_ROW_SIZE)} />
     </div>
   );
 
   if (profileState === "new") {
     return (
       <div className="flex flex-col gap-10">
-        {streamingSection}
         {nowPlayingSection}
+        {streamingSection}
       </div>
     );
   }
@@ -234,11 +235,12 @@ export function PersonalizedDiscovery() {
   if (ranked.length === 0) {
     return (
       <div className="flex flex-col gap-10">
-        <MessageCard>
-          <p>{th.home.noCandidates}</p>
-        </MessageCard>
-        {streamingSection}
         {nowPlayingSection}
+        {streamingSection || (
+          <MessageCard>
+            <p>{th.home.noCandidates}</p>
+          </MessageCard>
+        )}
       </div>
     );
   }
@@ -253,6 +255,8 @@ export function PersonalizedDiscovery() {
 
   return (
     <div className="flex flex-col gap-10">
+      {nowPlayingSection}
+
       {profileState === "preferencesOnly" && <p className="text-sm opacity-70">{th.home.preferencesOnlyBody}</p>}
       {profileState === "someInteraction" && <p className="text-sm opacity-70">{th.home.someInteractionBody}</p>}
       {profileState === "strong" && patternGenreNames.length > 0 && (
@@ -297,8 +301,6 @@ export function PersonalizedDiscovery() {
           />
         </div>
       )}
-
-      {nowPlayingSection}
     </div>
   );
 }
