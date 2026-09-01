@@ -13,6 +13,7 @@ import type {
   TMDBPopularMoviesResponse,
   TMDBWatchProvidersResponse,
 } from "@/types/tmdb";
+import { serializeDiscoverGenres, type GenreMatchMode } from "@/lib/movieSearch";
 
 const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
 
@@ -267,6 +268,8 @@ export async function getMovieRecommendations(
 
 export interface DiscoverMoviesParams {
   genreIds?: number[];
+  /** Defaults to "any" to preserve recommendation-pool behavior. */
+  genreMatch?: GenreMatchMode;
   directorId?: number;
   castId?: number;
   companyId?: number;
@@ -289,10 +292,12 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
     page: String(params.page ?? 1),
   };
   if (params.genreIds && params.genreIds.length > 0) {
-    // Pipe = OR in TMDB's discover syntax - "matches any of these genres",
-    // not "matches all of them" (comma would be AND, and often over-narrows
-    // to near-empty results once 2+ genres are selected).
-    searchParams.with_genres = params.genreIds.join("|");
+    // Recommendation pools keep the historical OR default. Explicit search
+    // surfaces can opt into AND so every chosen genre must be present.
+    searchParams.with_genres = serializeDiscoverGenres(
+      params.genreIds,
+      params.genreMatch ?? "any",
+    );
   }
   if (params.directorId !== undefined) {
     searchParams.with_crew = String(params.directorId);

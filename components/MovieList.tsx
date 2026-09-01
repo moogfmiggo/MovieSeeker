@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import type { TMDBMovie } from "@/types/tmdb";
 import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
-import { loadPreferences } from "@/lib/preferences";
-import { recommendMovies } from "@/lib/recommendations";
 import { loadWatched, toggleWatched, filterUnwatched } from "@/lib/watched";
 import { loadFavorites, toggleFavorite } from "@/lib/favorites";
 import { th } from "@/lib/i18n";
@@ -13,28 +11,25 @@ import { th } from "@/lib/i18n";
 export function MovieList({
   movies,
   providersByMovieId,
+  selectedGenreIds = [],
 }: {
   movies: TMDBMovie[];
   providersByMovieId?: Record<number, WatchProviderSummary>;
+  selectedGenreIds?: readonly number[];
 }) {
-  // Server-rendered/initial-hydration state matches what the server sent
-  // (original TMDB order, nothing filtered) - preferences and watched state
-  // live in localStorage, which only exists client-side, so both are
-  // applied after mount.
-  const [orderedMovies, setOrderedMovies] = useState<TMDBMovie[]>(movies);
-  const [isPersonalized, setIsPersonalized] = useState(false);
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [showWatchedToo, setShowWatchedToo] = useState(false);
 
   useEffect(() => {
-    const selectedGenreIds = loadPreferences();
+    // Watched/favorite state is browser-local and intentionally restored
+    // after hydration. Genre filtering already happened on the server from
+    // the URL's explicit search intent, so it must not be replaced here by
+    // a soft client-side reorder of a Popular pool.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOrderedMovies(recommendMovies(movies, selectedGenreIds));
-    setIsPersonalized(selectedGenreIds.length > 0);
     setWatchedIds(loadWatched());
     setFavoriteIds(loadFavorites());
-  }, [movies]);
+  }, []);
 
   function handleToggleWatched(movieId: number) {
     setWatchedIds(toggleWatched(movieId));
@@ -44,17 +39,19 @@ export function MovieList({
     setFavoriteIds(toggleFavorite(movieId));
   }
 
-  if (orderedMovies.length === 0) {
+  if (movies.length === 0) {
     return <p className="mt-8 text-sm opacity-70">{th.movieList.noMoviesFound}</p>;
   }
 
-  const visibleMovies = showWatchedToo ? orderedMovies : filterUnwatched(orderedMovies, watchedIds);
+  const visibleMovies = showWatchedToo ? movies : filterUnwatched(movies, watchedIds);
   const allWatched = visibleMovies.length === 0 && !showWatchedToo;
 
   return (
     <div className="mt-6">
-      {isPersonalized && (
-        <p className="mb-3 text-sm font-medium text-accent">{th.movieList.recommendedForYou}</p>
+      {selectedGenreIds.length > 0 && (
+        <p className="mb-3 text-sm font-medium text-accent">
+          {th.movieList.matchesAllSelectedGenres}
+        </p>
       )}
 
       {allWatched ? (

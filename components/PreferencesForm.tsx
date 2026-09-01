@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TMDBGenre } from "@/types/tmdb";
 import { loadPreferences, savePreferences } from "@/lib/preferences";
+import { buildMoviesHref } from "@/lib/movieSearch";
 import { th } from "@/lib/i18n";
 
 export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
@@ -14,6 +15,7 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
   // exist. Deliberately separate from `feedback`, which auto-hides after a
   // few seconds; this should stay visible once it's true.
   const [hasSavedPreferences, setHasSavedPreferences] = useState(false);
+  const [savedGenreIds, setSavedGenreIds] = useState<number[]>([]);
 
   // localStorage only exists in the browser, so preferences are restored
   // after mount rather than during the initial (server-rendered) render.
@@ -24,6 +26,7 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
     const restored = loadPreferences();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedGenreIds(restored);
+    setSavedGenreIds(restored);
     setHasSavedPreferences(restored.length > 0);
   }, []);
 
@@ -42,7 +45,10 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
   function handleSave() {
     const success = savePreferences(selectedGenreIds);
     setFeedback(success ? "saved" : "error");
-    if (success) setHasSavedPreferences(true);
+    if (success) {
+      setSavedGenreIds(selectedGenreIds);
+      setHasSavedPreferences(true);
+    }
   }
 
   return (
@@ -98,7 +104,7 @@ export function PreferencesForm({ genres }: { genres: TMDBGenre[] }) {
       {hasSavedPreferences && (
         <p className="mt-4">
           <Link
-            href="/movies"
+            href={buildMoviesHref(savedGenreIds)}
             className="text-sm font-medium text-accent underline underline-offset-2 hover:no-underline"
           >
             {th.preferencesPage.goToMovies}

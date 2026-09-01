@@ -1,6 +1,7 @@
-import { getPopularMovies, getWatchProvidersForMovies } from "@/lib/tmdb";
+import { discoverMovies, getPopularMovies, getWatchProvidersForMovies } from "@/lib/tmdb";
 import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { withTimeoutFallback } from "@/lib/timeout";
+import { filterMoviesByAllGenres, normalizeGenreIds } from "@/lib/movieSearch";
 import { MovieList } from "@/components/MovieList";
 import { th } from "@/lib/i18n";
 
@@ -12,17 +13,30 @@ export const dynamic = "force-dynamic";
 // still render on time with no badges rather than wait indefinitely.
 const WATCH_PROVIDERS_TIMEOUT_MS = 3000;
 
-export default async function MoviesPage() {
+export default async function MoviesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ genres?: string | string[] }>;
+}) {
+  const selectedGenreIds = normalizeGenreIds((await searchParams).genres);
   let movies;
 
   try {
-    const data = await getPopularMovies();
-    movies = data.results;
+    if (selectedGenreIds.length > 0) {
+      const data = await discoverMovies({
+        genreIds: selectedGenreIds,
+        genreMatch: "all",
+      });
+      movies = filterMoviesByAllGenres(data.results, selectedGenreIds);
+    } else {
+      const data = await getPopularMovies();
+      movies = data.results;
+    }
   } catch (error) {
     // Full detail (still token-free) goes to server logs only. The client
     // only ever sees the generic message thrown below, via app/movies/error.tsx.
     console.error(
-      "[movies] failed to load popular movies:",
+      "[movies] failed to load movies:",
       error instanceof Error ? error.message : "unknown error",
     );
     throw new Error("Unable to load movies right now.");
@@ -45,7 +59,11 @@ export default async function MoviesPage() {
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{th.moviesPage.title}</h1>
       <p className="mt-1 text-sm opacity-70">{th.moviesPage.subtitle}</p>
-      <MovieList movies={movies} providersByMovieId={providersByMovieId} />
+      <MovieList
+        movies={movies}
+        providersByMovieId={providersByMovieId}
+        selectedGenreIds={selectedGenreIds}
+      />
     </main>
   );
 }

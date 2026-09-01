@@ -82,6 +82,7 @@ export const th = {
   },
   movieList: {
     recommendedForYou: "แนะนำสำหรับคุณ",
+    matchesAllSelectedGenres: "หนังที่ตรงกับทุกแนวที่คุณเลือก",
     noMoviesFound: "ไม่พบหนัง",
     allWatched: "คุณดูหนังทั้งหมดในรายการนี้แล้ว",
     showWatchedToo: "แสดงหนังที่ดูแล้ว",
