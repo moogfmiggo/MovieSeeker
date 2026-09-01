@@ -14,8 +14,19 @@ import type {
   TMDBWatchProvidersResponse,
 } from "@/types/tmdb";
 import { serializeDiscoverGenres, type GenreMatchMode } from "@/lib/movieSearch";
+import { withTimeoutFallback } from "@/lib/timeout";
+import {
+  mergeLocalizedMoviePage,
+  mergeLocalizedMovies,
+  mergeLocalizedMovieText,
+  moviePageNeedsEnglishFallback,
+  needsEnglishMovieFallback,
+} from "@/lib/tmdbLocalization";
 
 const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
+const THAI_LANGUAGE = "th-TH";
+const ENGLISH_LANGUAGE = "en-US";
+const ENGLISH_FALLBACK_TIMEOUT_MS = 1800;
 
 export class TMDBError extends Error {
   constructor(
@@ -103,23 +114,47 @@ async function tmdbFetch<T>(
 /** Popular rankings don't need per-request freshness - a short cache avoids
  *  forcing a fresh TMDB round-trip on every single /movies visit. */
 const POPULAR_MOVIES_REVALIDATE_SECONDS = 90;
+const DISCOVERY_REVALIDATE_SECONDS = 60 * 5;
 
-/** Fetch TMDB's popular movies list (en-US). Server-side only. */
+async function fetchThaiFirstMoviePage(
+  path: string,
+  searchParams: Record<string, string>,
+  options: { revalidateSeconds?: number } = {},
+): Promise<TMDBPopularMoviesResponse> {
+  const thai = await tmdbFetch<TMDBPopularMoviesResponse>(
+    path,
+    { ...searchParams, language: THAI_LANGUAGE },
+    options,
+  );
+  if (!moviePageNeedsEnglishFallback(thai)) return thai;
+
+  const english = await withTimeoutFallback(
+    tmdbFetch<TMDBPopularMoviesResponse>(
+      path,
+      { ...searchParams, language: ENGLISH_LANGUAGE },
+      options,
+    ),
+    ENGLISH_FALLBACK_TIMEOUT_MS,
+    null,
+  );
+  // Thai data is still useful. A failed/slow optional fallback must not turn
+  // a successful primary request into a failed or indefinitely stalled page.
+  return mergeLocalizedMoviePage(thai, english);
+}
+
+/** Fetch TMDB's popular movies list, Thai first with bounded English fallback. */
 export async function getPopularMovies(page = 1): Promise<TMDBPopularMoviesResponse> {
-  return tmdbFetch<TMDBPopularMoviesResponse>(
+  return fetchThaiFirstMoviePage(
     "/movie/popular",
-    {
-      language: "en-US",
-      page: String(page),
-    },
+    { page: String(page) },
     { revalidateSeconds: POPULAR_MOVIES_REVALIDATE_SECONDS },
   );
 }
 
-/** Fetch TMDB's official movie genre list (en-US). Server-side only. */
+/** Fetch TMDB's official movie genre list in Thai. Server-side only. */
 export async function getMovieGenres(): Promise<TMDBGenreListResponse> {
   return tmdbFetch<TMDBGenreListResponse>("/genre/movie/list", {
-    language: "th-TH",
+    language: THAI_LANGUAGE,
   });
 }
 
@@ -160,15 +195,25 @@ function detailsToMovie(details: TMDBMovieDetailsResponse): TMDBMovie {
 }
 
 /**
- * Fetch full details for one movie by TMDB ID (en-US). Server-side only.
+ * Fetch full details for one movie by TMDB ID, Thai first with English
+ * fallback for missing display text. Server-side only.
  * Used to reconstruct movie cards from watched-state IDs — lib/watched.ts
  * only stores IDs, never full movie objects.
  */
 export async function getMovieById(movieId: number): Promise<TMDBMovie> {
-  const details = await tmdbFetch<TMDBMovieDetailsResponse>(`/movie/${movieId}`, {
-    language: "en-US",
+  const thai = await tmdbFetch<TMDBMovieDetailsResponse>(`/movie/${movieId}`, {
+    language: THAI_LANGUAGE,
   });
-  return detailsToMovie(details);
+  if (!needsEnglishMovieFallback(thai)) return detailsToMovie(thai);
+
+  const english = await withTimeoutFallback(
+    tmdbFetch<TMDBMovieDetailsResponse>(`/movie/${movieId}`, {
+      language: ENGLISH_LANGUAGE,
+    }),
+    ENGLISH_FALLBACK_TIMEOUT_MS,
+    null,
+  );
+  return detailsToMovie(mergeLocalizedMovieText(thai, english));
 }
 
 /**
@@ -203,17 +248,36 @@ export async function getMoviesByIds(movieIds: number[]): Promise<TMDBMovie[]> {
  * (lib/recommendations-v2.ts). Server-side only.
  */
 export async function getMovieDetails(movieId: number): Promise<TMDBMovieDetails> {
-  return tmdbFetch<TMDBMovieDetails>(`/movie/${movieId}`, {
-    language: "en-US",
+  const thai = await tmdbFetch<TMDBMovieDetails>(`/movie/${movieId}`, {
+    language: THAI_LANGUAGE,
     append_to_response: "credits,keywords",
   });
+  if (!needsEnglishMovieFallback(thai)) return thai;
+
+  const english = await withTimeoutFallback(
+    tmdbFetch<TMDBMovieDetailsResponse>(`/movie/${movieId}`, {
+      language: ENGLISH_LANGUAGE,
+    }),
+    ENGLISH_FALLBACK_TIMEOUT_MS,
+    null,
+  );
+  return mergeLocalizedMovieText(thai, english);
 }
 
 /** Fetch a person's profile (name, photo, known-for department, bio). Server-side only. */
 export async function getPersonDetails(personId: number): Promise<TMDBPersonDetails> {
-  return tmdbFetch<TMDBPersonDetails>(`/person/${personId}`, {
-    language: "en-US",
+  const thai = await tmdbFetch<TMDBPersonDetails>(`/person/${personId}`, {
+    language: THAI_LANGUAGE,
   });
+  if (thai.biography.trim()) return thai;
+  const english = await withTimeoutFallback(
+    tmdbFetch<TMDBPersonDetails>(`/person/${personId}`, {
+      language: ENGLISH_LANGUAGE,
+    }),
+    ENGLISH_FALLBACK_TIMEOUT_MS,
+    null,
+  );
+  return english ? { ...thai, biography: english.biography } : thai;
 }
 
 /**
@@ -223,9 +287,25 @@ export async function getPersonDetails(personId: number): Promise<TMDBPersonDeta
 export async function getPersonMovieCredits(
   personId: number,
 ): Promise<TMDBPersonMovieCreditsResponse> {
-  return tmdbFetch<TMDBPersonMovieCreditsResponse>(`/person/${personId}/movie_credits`, {
-    language: "en-US",
+  const path = `/person/${personId}/movie_credits`;
+  const thai = await tmdbFetch<TMDBPersonMovieCreditsResponse>(path, {
+    language: THAI_LANGUAGE,
   });
+  if (![...thai.cast, ...thai.crew].some(needsEnglishMovieFallback)) return thai;
+
+  const english = await withTimeoutFallback(
+    tmdbFetch<TMDBPersonMovieCreditsResponse>(path, {
+      language: ENGLISH_LANGUAGE,
+    }),
+    ENGLISH_FALLBACK_TIMEOUT_MS,
+    null,
+  );
+  if (!english) return thai;
+  return {
+    ...thai,
+    cast: mergeLocalizedMovies(thai.cast, english.cast),
+    crew: mergeLocalizedMovies(thai.crew, english.crew),
+  };
 }
 
 /** Fetch a production company's profile (name, logo). Server-side only. */
@@ -241,12 +321,15 @@ export async function getMoviesByCompany(
   companyId: number,
   page = 1,
 ): Promise<TMDBPopularMoviesResponse> {
-  return tmdbFetch<TMDBPopularMoviesResponse>("/discover/movie", {
-    with_companies: String(companyId),
-    language: "en-US",
-    page: String(page),
-    sort_by: "popularity.desc",
-  });
+  return fetchThaiFirstMoviePage(
+    "/discover/movie",
+    {
+      with_companies: String(companyId),
+      page: String(page),
+      sort_by: "popularity.desc",
+    },
+    { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
+  );
 }
 
 /**
@@ -260,10 +343,11 @@ export async function getMovieRecommendations(
   movieId: number,
   page = 1,
 ): Promise<TMDBPopularMoviesResponse> {
-  return tmdbFetch<TMDBPopularMoviesResponse>(`/movie/${movieId}/recommendations`, {
-    language: "en-US",
-    page: String(page),
-  });
+  return fetchThaiFirstMoviePage(
+    `/movie/${movieId}/recommendations`,
+    { page: String(page) },
+    { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
+  );
 }
 
 export interface DiscoverMoviesParams {
@@ -287,7 +371,6 @@ export interface DiscoverMoviesParams {
  */
 export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDBPopularMoviesResponse> {
   const searchParams: Record<string, string> = {
-    language: "en-US",
     sort_by: "popularity.desc",
     page: String(params.page ?? 1),
   };
@@ -311,7 +394,11 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
   if (params.keywordIds && params.keywordIds.length > 0) {
     searchParams.with_keywords = params.keywordIds.join("|");
   }
-  return tmdbFetch<TMDBPopularMoviesResponse>("/discover/movie", searchParams);
+  return fetchThaiFirstMoviePage(
+    "/discover/movie",
+    searchParams,
+    { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
+  );
 }
 
 // Watch-provider catalogs (which service has a title, and in which region)
