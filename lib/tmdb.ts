@@ -99,12 +99,20 @@ async function tmdbFetch<T>(
   return data as T;
 }
 
+/** Popular rankings don't need per-request freshness - a short cache avoids
+ *  forcing a fresh TMDB round-trip on every single /movies visit. */
+const POPULAR_MOVIES_REVALIDATE_SECONDS = 90;
+
 /** Fetch TMDB's popular movies list (en-US). Server-side only. */
 export async function getPopularMovies(page = 1): Promise<TMDBPopularMoviesResponse> {
-  return tmdbFetch<TMDBPopularMoviesResponse>("/movie/popular", {
-    language: "en-US",
-    page: String(page),
-  });
+  return tmdbFetch<TMDBPopularMoviesResponse>(
+    "/movie/popular",
+    {
+      language: "en-US",
+      page: String(page),
+    },
+    { revalidateSeconds: POPULAR_MOVIES_REVALIDATE_SECONDS },
+  );
 }
 
 /** Fetch TMDB's official movie genre list (en-US). Server-side only. */

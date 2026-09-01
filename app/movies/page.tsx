@@ -1,10 +1,16 @@
 import { getPopularMovies, getWatchProvidersForMovies } from "@/lib/tmdb";
 import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
+import { withTimeoutFallback } from "@/lib/timeout";
 import { MovieList } from "@/components/MovieList";
 import { th } from "@/lib/i18n";
 
 // Always fetch live from TMDB at request time — never prerendered at build time.
 export const dynamic = "force-dynamic";
+
+// Watch-provider enrichment is nice-to-have (badges), not core content - if
+// TMDB is slow to answer for the ~20 movies on this page, the grid must
+// still render on time with no badges rather than wait indefinitely.
+const WATCH_PROVIDERS_TIMEOUT_MS = 3000;
 
 export default async function MoviesPage() {
   let movies;
@@ -22,10 +28,17 @@ export default async function MoviesPage() {
     throw new Error("Unable to load movies right now.");
   }
 
-  // Never throws (see getWatchProvidersForMovies) - a provider lookup
-  // failure for one or all movies just means no badges are shown, it must
-  // never take down the whole movies page.
-  const rawProviders = await getWatchProvidersForMovies(movies.map((movie) => movie.id));
+  // Never throws on its own (see getWatchProvidersForMovies) - a provider
+  // lookup failure for one or all movies just means no badges are shown.
+  // withTimeoutFallback bounds how long we additionally wait for it to
+  // finish: past WATCH_PROVIDERS_TIMEOUT_MS, we proceed with {} (no
+  // badges) rather than let a slow TMDB response hold up the whole page -
+  // it must never take down or stall the movies page.
+  const rawProviders = await withTimeoutFallback(
+    getWatchProvidersForMovies(movies.map((movie) => movie.id)),
+    WATCH_PROVIDERS_TIMEOUT_MS,
+    {},
+  );
   const providersByMovieId = summarizeWatchProvidersByMovie(rawProviders);
 
   return (
