@@ -15,6 +15,7 @@ import type {
 } from "@/types/tmdb";
 import { serializeDiscoverGenres, type GenreMatchMode } from "@/lib/movieSearch";
 import { withTimeoutFallback } from "@/lib/timeout";
+import { DEFAULT_WATCH_REGION } from "@/lib/watchProviders";
 import {
   mergeLocalizedMoviePage,
   mergeLocalizedMovies,
@@ -148,6 +149,35 @@ export async function getPopularMovies(page = 1): Promise<TMDBPopularMoviesRespo
     "/movie/popular",
     { page: String(page) },
     { revalidateSeconds: POPULAR_MOVIES_REVALIDATE_SECONDS },
+  );
+}
+
+/** Popular movies currently included with streaming access in Thailand. */
+export async function getStreamingMovies(
+  page = 1,
+  region: string = DEFAULT_WATCH_REGION,
+): Promise<TMDBPopularMoviesResponse> {
+  return fetchThaiFirstMoviePage(
+    "/discover/movie",
+    {
+      page: String(page),
+      sort_by: "popularity.desc",
+      watch_region: region,
+      with_watch_monetization_types: "flatrate|free|ads",
+    },
+    { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
+  );
+}
+
+/** Movies currently playing in cinemas, using Thailand's regional releases. */
+export async function getNowPlayingMovies(
+  page = 1,
+  region: string = DEFAULT_WATCH_REGION,
+): Promise<TMDBPopularMoviesResponse> {
+  return fetchThaiFirstMoviePage(
+    "/movie/now_playing",
+    { page: String(page), region },
+    { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
   );
 }
 
@@ -359,6 +389,8 @@ export interface DiscoverMoviesParams {
   companyId?: number;
   /** v3 - keyword/theme-based discovery (Part 1/Part 6 "movie characteristics"). */
   keywordIds?: number[];
+  /** Restricts candidates to subscription/free/ad-supported streaming in this region. */
+  streamingRegion?: string;
   page?: number;
 }
 
@@ -394,11 +426,22 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
   if (params.keywordIds && params.keywordIds.length > 0) {
     searchParams.with_keywords = params.keywordIds.join("|");
   }
+  if (params.streamingRegion) {
+    searchParams.watch_region = params.streamingRegion;
+    searchParams.with_watch_monetization_types = "flatrate|free|ads";
+  }
   return fetchThaiFirstMoviePage(
     "/discover/movie",
     searchParams,
     { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
   );
+}
+
+/** Convenience wrapper for recommendation pools that must prefer streaming in Thailand. */
+export async function discoverStreamingMovies(
+  params: Omit<DiscoverMoviesParams, "streamingRegion">,
+): Promise<TMDBPopularMoviesResponse> {
+  return discoverMovies({ ...params, streamingRegion: DEFAULT_WATCH_REGION });
 }
 
 // Watch-provider catalogs (which service has a title, and in which region)

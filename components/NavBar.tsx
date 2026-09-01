@@ -9,9 +9,6 @@ export function NavBar() {
           {th.meta.brand}
         </Link>
         <div className="flex gap-4 text-sm">
-          <Link href="/movies" className="text-muted transition hover:text-foreground">
-            {th.nav.movies}
-          </Link>
           <Link href="/watched" className="text-muted transition hover:text-foreground">
             {th.nav.watched}
           </Link>

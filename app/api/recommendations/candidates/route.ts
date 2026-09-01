@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  getPopularMovies,
+  getStreamingMovies,
   getMovieById,
   getMovieDetails,
   getMovieRecommendations,
-  discoverMovies,
+  discoverStreamingMovies,
   getMovieGenres,
   TMDBConfigError,
   TMDBError,
@@ -20,7 +20,7 @@ import {
   type CandidatePool,
   type MovieSignalSource,
 } from "@/lib/recommendations-v2";
-import type { TMDBGenre, TMDBMovieDetails } from "@/types/tmdb";
+import type { TMDBGenre, TMDBMovie, TMDBMovieDetails } from "@/types/tmdb";
 
 // Always fetch live from TMDB at request time — never statically cached at build time.
 export const dynamic = "force-dynamic";
@@ -36,6 +36,10 @@ function logSoftFailure(step: string, error: unknown): void {
   console.error(`[recommendations] ${step} failed (continuing without it):`, error instanceof Error ? error.message : "unknown error");
 }
 
+function recordStreamingIds(target: Set<number>, movies: readonly TMDBMovie[]): void {
+  for (const movie of movies) target.add(movie.id);
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const favoriteIds = parseIds(searchParams.get("favoriteIds"));
@@ -44,12 +48,11 @@ export async function GET(request: Request) {
   const dismissedIds = parseIds(searchParams.get("dismissedIds"));
 
   try {
-    // Primary candidate source. Left outside any try/catch on purpose - if
-    // even this fails, there is nothing to show *anyone* (including a
-    // brand-new user with no signals at all), so it's surfaced as a real
-    // error to the client rather than a silently-empty candidate list.
-    // Mirrors app/api/tmdb/popular/route.ts's convention.
-    const popular = await getPopularMovies();
+    // Primary candidate source: titles available through subscription,
+    // free, or ad-supported streaming in Thailand. Left outside any
+    // try/catch on purpose: a failure is surfaced instead of silently
+    // falling back to unrelated worldwide titles.
+    const streaming = await getStreamingMovies();
 
     // Secondary/display-only data - degrades to the static Thai list rather
     // than failing the request. Mirrors app/preferences/page.tsx exactly.
@@ -62,15 +65,17 @@ export async function GET(request: Request) {
     }
     const genreMap: Record<number, string> = Object.fromEntries(genreList.map((genre) => [genre.id, genre.name]));
 
-    const pools: CandidatePool[] = [{ movies: popular.results, signal: { type: "discoverPool" } }];
+    const pools: CandidatePool[] = [{ movies: streaming.results, signal: { type: "discoverPool" } }];
+    const streamingCandidateIds = new Set(streaming.results.map((movie) => movie.id));
 
     // Everything below is best-effort: an individual failure just means one
-    // fewer signal, never a failed response (the popular pool above already
+    // fewer signal, never a failed response (the streaming pool above already
     // guarantees something to show).
     if (preferredGenreIds.length > 0) {
       try {
-        const pool = await discoverMovies({ genreIds: preferredGenreIds });
+        const pool = await discoverStreamingMovies({ genreIds: preferredGenreIds });
         pools.push({ movies: pool.results, signal: { type: "discoverPool" } });
+        recordStreamingIds(streamingCandidateIds, pool.results);
       } catch (error) {
         logSoftFailure("preferred-genre discover", error);
       }
@@ -116,15 +121,16 @@ export async function GET(request: Request) {
 
         const [directorPool, actorPool, companyPool, favoriteGenrePool, keywordPool, ...similarityPools] =
           await Promise.allSettled([
-            affinity.topDirector ? discoverMovies({ directorId: affinity.topDirector.id }) : Promise.resolve(null),
-            affinity.topActor ? discoverMovies({ castId: affinity.topActor.id }) : Promise.resolve(null),
-            affinity.topCompany ? discoverMovies({ companyId: affinity.topCompany.id }) : Promise.resolve(null),
-            extraGenreId !== undefined ? discoverMovies({ genreIds: [extraGenreId] }) : Promise.resolve(null),
-            topKeyword ? discoverMovies({ keywordIds: [topKeyword.id] }) : Promise.resolve(null),
+            affinity.topDirector ? discoverStreamingMovies({ directorId: affinity.topDirector.id }) : Promise.resolve(null),
+            affinity.topActor ? discoverStreamingMovies({ castId: affinity.topActor.id }) : Promise.resolve(null),
+            affinity.topCompany ? discoverStreamingMovies({ companyId: affinity.topCompany.id }) : Promise.resolve(null),
+            extraGenreId !== undefined ? discoverStreamingMovies({ genreIds: [extraGenreId] }) : Promise.resolve(null),
+            topKeyword ? discoverStreamingMovies({ keywordIds: [topKeyword.id] }) : Promise.resolve(null),
             ...similarityFavoriteIds.map((id) => getMovieRecommendations(id)),
           ]);
 
         if (directorPool.status === "fulfilled" && directorPool.value && affinity.topDirector) {
+          recordStreamingIds(streamingCandidateIds, directorPool.value.results);
           pools.push({
             movies: directorPool.value.results,
             signal: { type: "directorAffinity", personId: affinity.topDirector.id, personName: affinity.topDirector.name },
@@ -134,6 +140,7 @@ export async function GET(request: Request) {
         }
 
         if (actorPool.status === "fulfilled" && actorPool.value && affinity.topActor) {
+          recordStreamingIds(streamingCandidateIds, actorPool.value.results);
           pools.push({
             movies: actorPool.value.results,
             signal: { type: "actorAffinity", personId: affinity.topActor.id, personName: affinity.topActor.name },
@@ -143,6 +150,7 @@ export async function GET(request: Request) {
         }
 
         if (companyPool.status === "fulfilled" && companyPool.value && affinity.topCompany) {
+          recordStreamingIds(streamingCandidateIds, companyPool.value.results);
           pools.push({
             movies: companyPool.value.results,
             signal: { type: "companyAffinity", companyId: affinity.topCompany.id, companyName: affinity.topCompany.name },
@@ -152,6 +160,7 @@ export async function GET(request: Request) {
         }
 
         if (favoriteGenrePool.status === "fulfilled" && favoriteGenrePool.value && extraGenreId !== undefined) {
+          recordStreamingIds(streamingCandidateIds, favoriteGenrePool.value.results);
           pools.push({
             movies: favoriteGenrePool.value.results,
             signal: { type: "favoriteGenre", genreId: extraGenreId },
@@ -161,6 +170,7 @@ export async function GET(request: Request) {
         }
 
         if (keywordPool.status === "fulfilled" && keywordPool.value && topKeyword) {
+          recordStreamingIds(streamingCandidateIds, keywordPool.value.results);
           pools.push({
             movies: keywordPool.value.results,
             signal: { type: "keywordAffinity", keywordId: topKeyword.id, keywordName: topKeyword.name },
@@ -212,7 +222,13 @@ export async function GET(request: Request) {
     }
 
     const candidates = mergeCandidatePools(pools);
-    return NextResponse.json({ candidates, genreMap, favoriteGenreNames, negativeGenreIds });
+    return NextResponse.json({
+      candidates,
+      genreMap,
+      favoriteGenreNames,
+      negativeGenreIds,
+      streamingCandidateIds: [...streamingCandidateIds],
+    });
   } catch (error) {
     if (error instanceof TMDBConfigError) {
       console.error("[recommendations] configuration error:", error.message);

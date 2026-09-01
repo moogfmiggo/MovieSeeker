@@ -20,7 +20,6 @@ export const th = {
     titleSuffix: "— MovieSeeker",
   },
   nav: {
-    movies: "หนัง",
     watched: "ดูแล้ว",
     favorites: "รายการโปรด",
     streaming: "บริการสตรีมมิ่ง",
@@ -48,8 +47,11 @@ export const th = {
   },
   /** Phase 4: personalized discovery homepage (Parts 1, 2, 6, 7, 8). */
   home: {
-    heroEyebrow: "หนังที่เหมาะกับคุณ",
-    popularTitle: "กำลังเป็นที่นิยม",
+    heroEyebrow: "หนังสตรีมมิ่งที่เหมาะกับคุณ",
+    streamingTitle: "หนังสตรีมมิ่งน่าดูในไทย",
+    streamingSubtitle: "หนังที่รับชมได้ผ่านบริการสตรีมมิ่งในประเทศไทย",
+    nowPlayingTitle: "หนังใหม่เข้าโรงในไทย",
+    nowPlayingSubtitle: "อ้างอิงภาพยนตร์ที่กำลังฉายในประเทศไทยจาก TMDB",
     viewDetails: "ดูรายละเอียด →",
     /** Part 7 - "personalization match", never quality/popularity. */
     matchScore: (score: number) => `${score}% เหมาะกับคุณ`,
@@ -64,7 +66,7 @@ export const th = {
       if (names.length === 1) return `คุณดูและชอบหนังแนว ${names[0]} หลายเรื่อง`;
       return `คุณดูและชอบหนังแนว ${names.slice(0, -1).join(", ")} และ ${names[names.length - 1]} หลายเรื่อง`;
     },
-    noCandidates: "เรายังมีข้อมูลไม่พอสำหรับแนะนำหนังให้คุณตอนนี้ ลองดูหนังยอดนิยมด้านล่างนี้ไปก่อนนะ",
+    noCandidates: "เรายังมีข้อมูลไม่พอสำหรับแนะนำเฉพาะบุคคล ลองดูหนังสตรีมมิ่งในไทยด้านล่างนี้ไปก่อนนะ",
     loadError: "ไม่สามารถโหลดคำแนะนำหนังได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง",
   },
   genreSearch: {
@@ -86,7 +88,7 @@ export const th = {
     body: "เกิดข้อผิดพลาดขณะดึงข้อมูลหนังจาก TMDB กรุณาลองใหม่อีกครั้ง",
   },
   movieList: {
-    recommendedForYou: "แนะนำสำหรับคุณ",
+    recommendedForYou: "แนะนำสำหรับคุณบนสตรีมมิ่ง",
     matchesAllSelectedGenres: "หนังที่ตรงกับทุกแนวที่คุณเลือก",
     noMoviesFound: "ไม่พบหนัง",
     allWatched: "คุณดูหนังทั้งหมดในรายการนี้แล้ว",

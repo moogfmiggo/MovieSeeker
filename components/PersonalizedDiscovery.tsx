@@ -17,13 +17,15 @@ import {
 } from "@/lib/recommendations-v2";
 import { MovieGrid } from "@/components/MovieGrid";
 import { th, explainMatchReason } from "@/lib/i18n";
+import { prioritizeStreamingCandidates } from "@/lib/homeDiscovery";
+import type { WatchProviderSummary } from "@/lib/watchProviders";
 
 const BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/w1280";
 
 // Part 14 - "avoid recommendation fatigue": one hero + a small, curated grid,
 // not dozens of rows.
 const FOR_YOU_GRID_SIZE = 9;
-const POPULAR_ROW_SIZE = 6;
+const DISCOVERY_ROW_SIZE = 6;
 
 type Status = "loading" | "ready" | "error";
 
@@ -33,6 +35,8 @@ interface CandidatesResponse {
   favoriteGenreNames: string[];
   /** v3 - genres frequent among dismissed movies; reduces score, doesn't exclude. */
   negativeGenreIds: number[];
+  /** IDs confirmed by TMDB Discover as streamable in Thailand. */
+  streamingCandidateIds: number[];
 }
 
 function isCandidatesResponse(data: unknown): data is CandidatesResponse {
@@ -40,16 +44,36 @@ function isCandidatesResponse(data: unknown): data is CandidatesResponse {
     !!data &&
     typeof data === "object" &&
     Array.isArray((data as { candidates?: unknown }).candidates) &&
-    typeof (data as { genreMap?: unknown }).genreMap === "object"
+    typeof (data as { genreMap?: unknown }).genreMap === "object" &&
+    Array.isArray((data as { streamingCandidateIds?: unknown }).streamingCandidateIds)
   );
 }
 
-interface PopularResponse {
-  results: TMDBMovie[];
+interface HomeDiscoveryResponse {
+  streaming: TMDBMovie[];
+  nowPlaying: TMDBMovie[];
 }
 
-function isPopularResponse(data: unknown): data is PopularResponse {
-  return !!data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results);
+function isHomeDiscoveryResponse(data: unknown): data is HomeDiscoveryResponse {
+  return (
+    !!data &&
+    typeof data === "object" &&
+    Array.isArray((data as { streaming?: unknown }).streaming) &&
+    Array.isArray((data as { nowPlaying?: unknown }).nowPlaying)
+  );
+}
+
+interface ProvidersResponse {
+  providers: Record<number, WatchProviderSummary>;
+}
+
+function isProvidersResponse(data: unknown): data is ProvidersResponse {
+  return (
+    !!data &&
+    typeof data === "object" &&
+    !!(data as { providers?: unknown }).providers &&
+    typeof (data as { providers?: unknown }).providers === "object"
+  );
 }
 
 function LoadingSkeleton() {
@@ -75,7 +99,11 @@ export function PersonalizedDiscovery() {
   const [profileState, setProfileState] = useState<ProfileState>("new");
   const [ranked, setRanked] = useState<ScoredMovie[]>([]);
   const [patternGenreNames, setPatternGenreNames] = useState<string[]>([]);
-  const [popularMovies, setPopularMovies] = useState<TMDBMovie[]>([]);
+  const [streamingMovies, setStreamingMovies] = useState<TMDBMovie[]>([]);
+  const [nowPlayingMovies, setNowPlayingMovies] = useState<TMDBMovie[]>([]);
+  const [providersByMovieId, setProvidersByMovieId] = useState<
+    Record<number, WatchProviderSummary>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -91,42 +119,72 @@ export function PersonalizedDiscovery() {
       const excludedIds = new Set([...watchedIds, ...dismissedIds]);
 
       try {
-        // Popular is always fetched (secondary section + State A's only
-        // content); candidates are only worth fetching once there's at
+        // Thailand streaming + theatrical discovery is always fetched;
+        // personalized candidates are only worth fetching once there's at
         // least one real signal to personalize from - skips the whole
         // multi-call TMDB orchestration for a brand-new visitor.
-        const [popularRes, candidatesRes] = await Promise.all([
-          fetch("/api/tmdb/popular"),
+        const [homeRes, candidatesRes] = await Promise.all([
+          fetch("/api/tmdb/home"),
           profile === "new" ? null : fetch(buildCandidatesUrl(favoriteIds, preferredGenreIds, dismissedIds)),
         ]);
 
-        if (!popularRes.ok) throw new Error(`popular request failed with status ${popularRes.status}`);
-        const popularData: unknown = await popularRes.json();
-        const popular = isPopularResponse(popularData) ? popularData.results : [];
+        if (!homeRes.ok) throw new Error(`home discovery failed with status ${homeRes.status}`);
+        const homeData: unknown = await homeRes.json();
+        if (!isHomeDiscoveryResponse(homeData)) throw new Error("invalid home discovery response");
 
         let results: ScoredMovie[] = [];
         let favoriteGenreNames: string[] = [];
 
-        if (candidatesRes) {
-          if (!candidatesRes.ok) throw new Error(`candidates request failed with status ${candidatesRes.status}`);
+        if (candidatesRes?.ok) {
           const candidatesData: unknown = await candidatesRes.json();
           if (isCandidatesResponse(candidatesData)) {
-            results = rankRecommendations(candidatesData.candidates, {
-              preferredGenreIds,
-              watchedIds,
-              dismissedIds,
-              genreMap: candidatesData.genreMap,
-              negativeGenreIds: candidatesData.negativeGenreIds,
-            });
+            results = prioritizeStreamingCandidates(
+              rankRecommendations(candidatesData.candidates, {
+                preferredGenreIds,
+                watchedIds,
+                dismissedIds,
+                genreMap: candidatesData.genreMap,
+                negativeGenreIds: candidatesData.negativeGenreIds,
+              }),
+              candidatesData.streamingCandidateIds,
+            );
             favoriteGenreNames = candidatesData.favoriteGenreNames;
           }
         }
 
+        const availableStreaming = homeData.streaming.filter(
+          (movie) => !excludedIds.has(movie.id),
+        );
+        const availableNowPlaying = homeData.nowPlaying.filter(
+          (movie) => !excludedIds.has(movie.id),
+        );
+
         if (!cancelled) {
-          setPopularMovies(popular.filter((movie) => !excludedIds.has(movie.id)));
+          setStreamingMovies(availableStreaming);
+          setNowPlayingMovies(availableNowPlaying);
           setRanked(results);
           setPatternGenreNames(favoriteGenreNames);
           setStatus("ready");
+        }
+
+        const providerMovieIds = (
+          results.length > 0
+            ? results.slice(0, FOR_YOU_GRID_SIZE + 1).map((item) => item.movie.id)
+            : availableStreaming.slice(0, DISCOVERY_ROW_SIZE).map((movie) => movie.id)
+        );
+        if (providerMovieIds.length > 0) {
+          try {
+            const providersRes = await fetch(buildProvidersUrl(providerMovieIds));
+            if (providersRes.ok) {
+              const providersData: unknown = await providersRes.json();
+              if (!cancelled && isProvidersResponse(providersData)) {
+                setProvidersByMovieId(providersData.providers);
+              }
+            }
+          } catch {
+            // Provider logos are progressive enhancement. The discovery
+            // sections remain valid because TMDB already filtered their pools.
+          }
         }
       } catch {
         if (!cancelled) setStatus("error");
@@ -145,15 +203,32 @@ export function PersonalizedDiscovery() {
     return <p className="text-sm text-red-400">{th.home.loadError}</p>;
   }
 
-  const popularSection = popularMovies.length > 0 && (
+  const streamingSection = streamingMovies.length > 0 && (
     <div>
-      <h2 className="text-sm font-semibold opacity-70">{th.home.popularTitle}</h2>
-      <MovieGrid movies={popularMovies.slice(0, POPULAR_ROW_SIZE)} />
+      <h2 className="text-lg font-semibold">{th.home.streamingTitle}</h2>
+      <p className="mt-1 text-sm opacity-60">{th.home.streamingSubtitle}</p>
+      <MovieGrid
+        movies={streamingMovies.slice(0, DISCOVERY_ROW_SIZE)}
+        providersByMovieId={providersByMovieId}
+      />
+    </div>
+  );
+
+  const nowPlayingSection = nowPlayingMovies.length > 0 && (
+    <div>
+      <h2 className="text-lg font-semibold">{th.home.nowPlayingTitle}</h2>
+      <p className="mt-1 text-sm opacity-60">{th.home.nowPlayingSubtitle}</p>
+      <MovieGrid movies={nowPlayingMovies.slice(0, DISCOVERY_ROW_SIZE)} />
     </div>
   );
 
   if (profileState === "new") {
-    return popularSection;
+    return (
+      <div className="flex flex-col gap-10">
+        {streamingSection}
+        {nowPlayingSection}
+      </div>
+    );
   }
 
   if (ranked.length === 0) {
@@ -162,7 +237,8 @@ export function PersonalizedDiscovery() {
         <MessageCard>
           <p>{th.home.noCandidates}</p>
         </MessageCard>
-        {popularSection}
+        {streamingSection}
+        {nowPlayingSection}
       </div>
     );
   }
@@ -213,13 +289,22 @@ export function PersonalizedDiscovery() {
       {gridMovies.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold">{th.movieList.recommendedForYou}</h2>
-          <MovieGrid movies={gridMovies} scoresByMovieId={scoresByMovieId} reasonsByMovieId={reasonsByMovieId} />
+          <MovieGrid
+            movies={gridMovies}
+            providersByMovieId={providersByMovieId}
+            scoresByMovieId={scoresByMovieId}
+            reasonsByMovieId={reasonsByMovieId}
+          />
         </div>
       )}
 
-      {popularSection}
+      {nowPlayingSection}
     </div>
   );
+}
+
+function buildProvidersUrl(movieIds: number[]): string {
+  return `/api/tmdb/providers?ids=${movieIds.join(",")}`;
 }
 
 function buildCandidatesUrl(favoriteIds: number[], preferredGenreIds: number[], dismissedIds: number[]): string {

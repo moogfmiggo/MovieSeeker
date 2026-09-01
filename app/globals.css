@@ -37,3 +37,32 @@ body {
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Thai", Arial, sans-serif;
 }
+
+/* Compact, cinematic horizontal scrollbar for cast rails. Firefox uses the
+   standard properties; Chromium/Safari use the WebKit pseudo-elements. */
+.cinematic-scrollbar {
+  scrollbar-color: rgb(232 184 75 / 72%) rgb(255 255 255 / 7%);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+.cinematic-scrollbar::-webkit-scrollbar {
+  height: 9px;
+}
+
+.cinematic-scrollbar::-webkit-scrollbar-track {
+  background: rgb(255 255 255 / 7%);
+  border-radius: 999px;
+}
+
+.cinematic-scrollbar::-webkit-scrollbar-thumb {
+  min-width: 48px;
+  border: 2px solid var(--background);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgb(232 184 75 / 58%), var(--accent));
+}
+
+.cinematic-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-hover);
+}

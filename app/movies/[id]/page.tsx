@@ -186,7 +186,7 @@ export default async function MovieDetailPage({ params }: PageProps<"/movies/[id
         <section className="mt-8">
           <h2 className="text-lg font-semibold">{th.movieDetail.cast}</h2>
           {cast.length > 0 ? (
-            <div className="mt-3 flex gap-4 overflow-x-auto pb-2">
+            <div className="cinematic-scrollbar mt-3 flex gap-4 overflow-x-auto pb-4 pr-2">
               {cast.map((member) => (
                 <PersonCard
                   key={member.id}
