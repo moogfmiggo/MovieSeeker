@@ -28,10 +28,12 @@ import type { TMDBGenre, TMDBMovie, TMDBMovieDetails } from "@/types/tmdb";
 export const dynamic = "force-dynamic";
 
 function parseIds(raw: string | null): number[] {
-  return (raw ?? "")
-    .split(",")
-    .map((value) => Number(value.trim()))
-    .filter((id) => Number.isFinite(id) && id > 0);
+  return [...new Set(
+    (raw ?? "")
+      .split(",")
+      .map((value) => Number(value.trim()))
+      .filter((id) => Number.isFinite(id) && id > 0),
+  )];
 }
 
 function logSoftFailure(step: string, error: unknown): void {
