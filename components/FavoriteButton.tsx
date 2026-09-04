@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadFavorites, toggleFavorite } from "@/lib/favorites";
+import {
+  loadFavorites,
+  loadFavoriteSeries,
+  toggleFavorite,
+  toggleFavoriteSeries,
+} from "@/lib/favorites";
 import { th } from "@/lib/i18n";
 
 /** Filled when favorited, outline otherwise - matches MovieCard's heart toggle. */
@@ -28,13 +33,23 @@ function HeartIcon({ filled }: { filled: boolean }) {
  * this owns its own state, since there's no parent list here. Mirrors
  * WatchedButton exactly.
  */
-export function FavoriteButton({ movieId, movieTitle }: { movieId: number; movieTitle: string }) {
+export function FavoriteButton({
+  movieId,
+  movieTitle,
+  mediaType = "movie",
+}: {
+  movieId: number;
+  movieTitle: string;
+  mediaType?: "movie" | "tv";
+}) {
   const [favorited, setFavorited] = useState<boolean | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFavorited(loadFavorites().includes(movieId));
-  }, [movieId]);
+    setFavorited(
+      (mediaType === "tv" ? loadFavoriteSeries() : loadFavorites()).includes(movieId),
+    );
+  }, [mediaType, movieId]);
 
   if (favorited === null) {
     return <div className="h-11 w-40 animate-pulse rounded-full bg-white/10" aria-hidden="true" />;
@@ -43,7 +58,9 @@ export function FavoriteButton({ movieId, movieTitle }: { movieId: number; movie
   return (
     <button
       type="button"
-      onClick={() => setFavorited(toggleFavorite(movieId).includes(movieId))}
+      onClick={() => setFavorited(
+        (mediaType === "tv" ? toggleFavoriteSeries(movieId) : toggleFavorite(movieId)).includes(movieId),
+      )}
       aria-pressed={favorited}
       aria-label={favorited ? th.favorite.removeLabel(movieTitle) : th.favorite.addLabel(movieTitle)}
       title={favorited ? th.favorite.removeLabel(movieTitle) : th.favorite.addLabel(movieTitle)}

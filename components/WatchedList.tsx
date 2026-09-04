@@ -5,23 +5,36 @@ import Link from "next/link";
 import type { TMDBMovie } from "@/types/tmdb";
 import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
-import { loadWatched, toggleWatched } from "@/lib/watched";
-import { loadFavorites, toggleFavorite } from "@/lib/favorites";
+import {
+  loadWatched,
+  loadWatchedSeries,
+  toggleWatched,
+  toggleWatchedSeries,
+} from "@/lib/watched";
+import {
+  loadFavorites,
+  loadFavoriteSeries,
+  toggleFavorite,
+  toggleFavoriteSeries,
+} from "@/lib/favorites";
 import { th } from "@/lib/i18n";
 
 type Status = "loading" | "ready" | "error";
 
 export function WatchedList() {
   const [status, setStatus] = useState<Status>("loading");
-  const [movies, setMovies] = useState<TMDBMovie[]>([]);
+  const [items, setItems] = useState<TMDBMovie[]>([]);
   const [providersByMovieId, setProvidersByMovieId] = useState<Record<number, WatchProviderSummary>>({});
+  const [providersBySeriesId, setProvidersBySeriesId] = useState<Record<number, WatchProviderSummary>>({});
   // Favorites are local state, independent of the async movie fetch above -
   // loaded in their own effect rather than folded into `load()`.
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
+  const [favoriteSeriesIds, setFavoriteSeriesIds] = useState<number[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFavoriteIds(loadFavorites());
+    setFavoriteSeriesIds(loadFavoriteSeries());
   }, []);
 
   useEffect(() => {
@@ -29,29 +42,29 @@ export function WatchedList() {
 
     async function load() {
       const watchedIds = loadWatched();
-      if (watchedIds.length === 0) {
+      const watchedSeriesIds = loadWatchedSeries();
+      if (watchedIds.length === 0 && watchedSeriesIds.length === 0) {
         if (!cancelled) {
-          setMovies([]);
+          setItems([]);
           setStatus("ready");
         }
         return;
       }
       try {
-        const res = await fetch(`/api/tmdb/movies?ids=${watchedIds.join(",")}`);
-        if (!res.ok) throw new Error(`request failed with status ${res.status}`);
-        const data: unknown = await res.json();
-        const results =
-          data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)
-            ? ((data as { results: TMDBMovie[] }).results)
-            : [];
-        const rawProviders = data && typeof data === "object" ? (data as { providers?: unknown }).providers : null;
-        const providers =
-          rawProviders && typeof rawProviders === "object"
-            ? (rawProviders as Record<number, WatchProviderSummary>)
-            : {};
+        const [movieResponse, seriesResponse] = await Promise.all([
+          watchedIds.length > 0 ? fetch(`/api/tmdb/movies?ids=${watchedIds.join(",")}`) : null,
+          watchedSeriesIds.length > 0
+            ? fetch(`/api/tmdb/series?ids=${watchedSeriesIds.join(",")}`)
+            : null,
+        ]);
+        if (movieResponse && !movieResponse.ok) throw new Error(`movie request failed with status ${movieResponse.status}`);
+        if (seriesResponse && !seriesResponse.ok) throw new Error(`series request failed with status ${seriesResponse.status}`);
+        const movieData: unknown = movieResponse ? await movieResponse.json() : null;
+        const seriesData: unknown = seriesResponse ? await seriesResponse.json() : null;
         if (!cancelled) {
-          setMovies(results);
-          setProvidersByMovieId(providers);
+          setItems([...readResults(movieData), ...readResults(seriesData)]);
+          setProvidersByMovieId(readProviders(movieData));
+          setProvidersBySeriesId(readProviders(seriesData));
           setStatus("ready");
         }
       } catch {
@@ -65,13 +78,17 @@ export function WatchedList() {
     };
   }, []);
 
-  function handleUnwatch(movieId: number) {
-    toggleWatched(movieId);
-    setMovies((current) => current.filter((movie) => movie.id !== movieId));
+  function handleUnwatch(item: TMDBMovie) {
+    if (item.media_type === "tv") toggleWatchedSeries(item.id);
+    else toggleWatched(item.id);
+    setItems((current) => current.filter(
+      (candidate) => candidate.id !== item.id || candidate.media_type !== item.media_type,
+    ));
   }
 
-  function handleToggleFavorite(movieId: number) {
-    setFavoriteIds(toggleFavorite(movieId));
+  function handleToggleFavorite(item: TMDBMovie) {
+    if (item.media_type === "tv") setFavoriteSeriesIds(toggleFavoriteSeries(item.id));
+    else setFavoriteIds(toggleFavorite(item.id));
   }
 
   if (status === "loading") {
@@ -92,12 +109,12 @@ export function WatchedList() {
     return <p className="mt-8 text-sm text-red-400">{th.watchedPage.loadError}</p>;
   }
 
-  if (movies.length === 0) {
+  if (items.length === 0) {
     return (
       <div className="mt-8 rounded-lg border border-border p-6 text-center text-sm">
         <p>{th.watchedPage.empty}</p>
         <Link
-          href="/movies"
+          href="/discover"
           className="mt-3 inline-block text-accent underline underline-offset-2"
         >
           {th.watchedPage.browseMovies}
@@ -108,18 +125,32 @@ export function WatchedList() {
 
   return (
     <ul className="mt-6 grid list-none grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5">
-      {movies.map((movie) => (
-        <li key={movie.id}>
+      {items.map((movie) => {
+        const isSeries = movie.media_type === "tv";
+        return <li key={`${isSeries ? "tv" : "movie"}:${movie.id}`}>
           <MovieCard
             movie={movie}
             isWatched
-            onToggleWatched={() => handleUnwatch(movie.id)}
-            isFavorited={favoriteIds.includes(movie.id)}
-            onToggleFavorite={() => handleToggleFavorite(movie.id)}
-            providers={providersByMovieId[movie.id]}
+            onToggleWatched={() => handleUnwatch(movie)}
+            isFavorited={(isSeries ? favoriteSeriesIds : favoriteIds).includes(movie.id)}
+            onToggleFavorite={() => handleToggleFavorite(movie)}
+            providers={(isSeries ? providersBySeriesId : providersByMovieId)[movie.id]}
           />
-        </li>
-      ))}
+        </li>;
+      })}
     </ul>
   );
+}
+
+function readResults(data: unknown): TMDBMovie[] {
+  return data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)
+    ? (data as { results: TMDBMovie[] }).results
+    : [];
+}
+
+function readProviders(data: unknown): Record<number, WatchProviderSummary> {
+  const providers = data && typeof data === "object" ? (data as { providers?: unknown }).providers : null;
+  return providers && typeof providers === "object"
+    ? providers as Record<number, WatchProviderSummary>
+    : {};
 }

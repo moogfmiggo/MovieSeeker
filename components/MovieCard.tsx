@@ -60,7 +60,7 @@ export function MovieCard({
   matchScore?: number;
   /** Phase 4 Part 6 - the single strongest reason, already resolved to Thai text. */
   matchReason?: string;
-  /** Series use separate identity/storage and intentionally omit movie-only actions for now. */
+  /** Can be disabled for a read-only surface; movie and series lists normally enable it. */
   showActions?: boolean;
 }) {
   const { visible: providerBadges, moreCount } = providers
@@ -140,6 +140,11 @@ export function MovieCard({
       <Link href={detailHref} className="mt-2 block">
         <h2 className="line-clamp-2 text-sm font-semibold hover:underline">{movie.title}</h2>
       </Link>
+      {movie.media_type === "tv" && (
+        <span className="mt-1 w-fit rounded-full border border-accent/40 px-2 py-0.5 text-[10px] font-semibold text-accent">
+          {th.common.seriesLabel}
+        </span>
+      )}
       {typeof matchScore === "number" && (
         <span className="mt-1 inline-block w-fit rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">
           {th.home.matchScore(matchScore)}

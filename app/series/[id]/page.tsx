@@ -6,6 +6,8 @@ import { topBilledCast } from "@/lib/credits";
 import { summarizeWatchProviders } from "@/lib/watchProviders";
 import { PersonCard } from "@/components/PersonCard";
 import { WatchProviderSection } from "@/components/WatchProviderSection";
+import { FavoriteButton } from "@/components/FavoriteButton";
+import { WatchedButton } from "@/components/WatchedButton";
 import { th } from "@/lib/i18n";
 
 const BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/w1280";
@@ -112,6 +114,10 @@ export default async function SeriesDetailPage({
                   {genre.name}
                 </span>
               ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <FavoriteButton movieId={series.id} movieTitle={series.name} mediaType="tv" />
+              <WatchedButton movieId={series.id} mediaType="tv" />
             </div>
           </div>
         </div>

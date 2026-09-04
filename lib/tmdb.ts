@@ -173,6 +173,10 @@ interface TMDBRawTVSeriesPage {
   total_results: number;
 }
 
+interface TMDBRawTVSeriesDetails extends Omit<TMDBRawTVSeries, "genre_ids"> {
+  genres: { id: number; name: string }[];
+}
+
 function normalizeTVSeries(series: TMDBRawTVSeries): TMDBMovie {
   return {
     id: series.id,
@@ -191,6 +195,13 @@ function normalizeTVSeries(series: TMDBRawTVSeries): TMDBMovie {
     video: false,
     media_type: "tv",
   };
+}
+
+function normalizeTVSeriesDetails(series: TMDBRawTVSeriesDetails): TMDBMovie {
+  return normalizeTVSeries({
+    ...series,
+    genre_ids: series.genres.map((genre) => genre.id),
+  });
 }
 
 async function fetchThaiFirstTVPage(
@@ -375,6 +386,41 @@ export async function getMovieDetails(movieId: number): Promise<TMDBMovieDetails
     null,
   );
   return mergeLocalizedMovieText(thai, english);
+}
+
+/** Reconstruct one TV card from its ID without loading the heavier credits payload. */
+export async function getTVSeriesById(seriesId: number): Promise<TMDBMovie> {
+  const thai = await tmdbFetch<TMDBRawTVSeriesDetails>(`/tv/${seriesId}`, {
+    language: THAI_LANGUAGE,
+  });
+  if (thai.name.trim() && thai.overview.trim()) return normalizeTVSeriesDetails(thai);
+
+  const english = await withTimeoutFallback(
+    tmdbFetch<TMDBRawTVSeriesDetails>(`/tv/${seriesId}`, { language: ENGLISH_LANGUAGE }),
+    ENGLISH_FALLBACK_TIMEOUT_MS,
+    null,
+  );
+  return normalizeTVSeriesDetails({
+    ...thai,
+    name: thai.name.trim() || english?.name || thai.original_name,
+    overview: thai.overview.trim() || english?.overview || "",
+  });
+}
+
+/** Fetch multiple saved series while preserving the user's stored order. */
+export async function getTVSeriesByIds(seriesIds: number[]): Promise<TMDBMovie[]> {
+  if (seriesIds.length === 0) return [];
+  const results = await Promise.allSettled(seriesIds.map((id) => getTVSeriesById(id)));
+  const fulfilled = results.filter(
+    (result): result is PromiseFulfilledResult<TMDBMovie> => result.status === "fulfilled",
+  );
+  if (fulfilled.length === 0) {
+    const firstRejection = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (firstRejection) throw firstRejection.reason;
+  }
+  return fulfilled.map((result) => result.value);
 }
 
 /** Fetch TMDB's TV genre list separately so series are always opt-in. */

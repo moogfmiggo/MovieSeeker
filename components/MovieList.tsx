@@ -4,8 +4,19 @@ import { useEffect, useState } from "react";
 import type { TMDBMovie } from "@/types/tmdb";
 import type { WatchProviderSummary } from "@/lib/watchProviders";
 import { MovieCard } from "@/components/MovieCard";
-import { loadWatched, toggleWatched, filterUnwatched } from "@/lib/watched";
-import { loadFavorites, toggleFavorite } from "@/lib/favorites";
+import {
+  filterUnwatched,
+  loadWatched,
+  loadWatchedSeries,
+  toggleWatched,
+  toggleWatchedSeries,
+} from "@/lib/watched";
+import {
+  loadFavorites,
+  loadFavoriteSeries,
+  toggleFavorite,
+  toggleFavoriteSeries,
+} from "@/lib/favorites";
 import { buildMovieFeedApiHref, mergeMoviesById } from "@/lib/movieSearch";
 import { th } from "@/lib/i18n";
 
@@ -67,16 +78,16 @@ export function MovieList({
     // the URL's explicit search intent, so it must not be replaced here by
     // a soft client-side reorder of a Popular pool.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setWatchedIds(loadWatched());
-    setFavoriteIds(loadFavorites());
-  }, []);
+    setWatchedIds(mediaType === "tv" ? loadWatchedSeries() : loadWatched());
+    setFavoriteIds(mediaType === "tv" ? loadFavoriteSeries() : loadFavorites());
+  }, [mediaType]);
 
   function handleToggleWatched(movieId: number) {
-    setWatchedIds(toggleWatched(movieId));
+    setWatchedIds(mediaType === "tv" ? toggleWatchedSeries(movieId) : toggleWatched(movieId));
   }
 
   function handleToggleFavorite(movieId: number) {
-    setFavoriteIds(toggleFavorite(movieId));
+    setFavoriteIds(mediaType === "tv" ? toggleFavoriteSeries(movieId) : toggleFavorite(movieId));
   }
 
   async function handleShowMore() {
@@ -111,12 +122,10 @@ export function MovieList({
     }
   }
 
-  const visibleMovies = mediaType === "tv"
-    ? loadedMovies
-    : showWatchedToo
+  const visibleMovies = showWatchedToo
     ? loadedMovies
     : filterUnwatched(loadedMovies, watchedIds);
-  const allWatched = mediaType === "movie" && visibleMovies.length === 0 && !showWatchedToo;
+  const allWatched = visibleMovies.length === 0 && !showWatchedToo;
   const hasMore = currentPage < availablePages;
 
   return (
@@ -151,7 +160,7 @@ export function MovieList({
                 isFavorited={favoriteIds.includes(movie.id)}
                 onToggleFavorite={() => handleToggleFavorite(movie.id)}
                 providers={loadedProviders[movie.id]}
-                showActions={mediaType === "movie"}
+                showActions
               />
             </li>
           ))}
