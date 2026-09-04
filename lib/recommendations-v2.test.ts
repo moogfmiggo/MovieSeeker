@@ -11,8 +11,11 @@ import {
   rankRecommendations,
   determineProfileState,
   mergeCandidatePools,
+  attachSignalsToExistingCandidates,
   buildAffinityProfile,
   SCORING_WEIGHTS,
+  affinityOccurrenceCount,
+  MIN_RICH_NEGATIVE_OCCURRENCES,
   type CandidateMovie,
   type MatchedSignal,
 } from "./recommendations-v2";
@@ -245,6 +248,84 @@ test("negative genre matching is capped, same as positive genre matching", () =>
   assert.equal(scoreById[1], scoreById[2]);
 });
 
+test("rich negative affinities lower matching candidates without adding a UI reason", () => {
+  const signals: MatchedSignal[] = [
+    { type: "negativeDirectorAffinity", personId: 1, personName: "D" },
+    { type: "negativeActorAffinity", personId: 2, personName: "A" },
+    { type: "negativeCompanyAffinity", companyId: 3, companyName: "C" },
+    { type: "negativeKeywordAffinity", keywordId: 4, keywordName: "K" },
+  ];
+  for (const signal of signals) {
+    const matched = candidate({
+      id: 1,
+      popularity: 0,
+      vote_count: 0,
+      matchedSignals: [
+        { type: "favoriteSimilarity", favoriteMovieId: 9, favoriteTitle: "Liked" },
+        signal,
+      ],
+    });
+    const neutral = candidate({
+      id: 2,
+      popularity: 0,
+      vote_count: 0,
+      matchedSignals: [{ type: "favoriteSimilarity", favoriteMovieId: 9, favoriteTitle: "Liked" }],
+    });
+    const ranked = rankRecommendations([matched, neutral]);
+    const scoreById = Object.fromEntries(ranked.map((result) => [result.movie.id, result.score]));
+    assert.ok(scoreById[1] < scoreById[2], `${signal.type} should reduce score`);
+    assert.ok(!ranked.find((result) => result.movie.id === 1)?.reasons.some(
+      (reason) => JSON.stringify(reason).toLowerCase().includes("negative"),
+    ));
+  }
+});
+
+test("negative pools annotate existing candidates but never introduce negative-only movies", () => {
+  const existing = candidate({ id: 1, matchedSignals: [{ type: "discoverPool" }] });
+  const result = attachSignalsToExistingCandidates(
+    [existing],
+    [{
+      movies: [movie({ id: 1 }), movie({ id: 2 })],
+      signal: { type: "negativeKeywordAffinity", keywordId: 10, keywordName: "slasher" },
+    }],
+  );
+
+  assert.deepEqual(result.map((item) => item.id), [1]);
+  assert.ok(result[0].matchedSignals.some((signal) => signal.type === "negativeKeywordAffinity"));
+  assert.equal(existing.matchedSignals.length, 1, "input candidate must not be mutated");
+});
+
+test("duplicate negative pool signals are attached and scored only once", () => {
+  const existing = candidate({
+    id: 1,
+    popularity: 0,
+    vote_count: 0,
+    matchedSignals: [{ type: "favoriteSimilarity", favoriteMovieId: 9, favoriteTitle: "Liked" }],
+  });
+  const signal: MatchedSignal = {
+    type: "negativeDirectorAffinity",
+    personId: 7,
+    personName: "D",
+  };
+  const once = attachSignalsToExistingCandidates([existing], [{ movies: [movie({ id: 1 })], signal }]);
+  const twice = attachSignalsToExistingCandidates(
+    [existing],
+    [{ movies: [movie({ id: 1 })], signal }, { movies: [movie({ id: 1 })], signal }],
+  );
+  assert.equal(rankRecommendations(once)[0].score, rankRecommendations(twice)[0].score);
+});
+
+test("rich negative affinity requires the same trait in at least two dismissed movies", () => {
+  const sources = [
+    { genreIds: [], directors: [{ id: 7, name: "D" }], topCast: [], companies: [], keywords: [] },
+    { genreIds: [], directors: [{ id: 7, name: "D" }], topCast: [], companies: [], keywords: [] },
+    { genreIds: [], directors: [{ id: 8, name: "Other" }], topCast: [], companies: [], keywords: [] },
+  ];
+  assert.equal(affinityOccurrenceCount(sources, "director", 7), MIN_RICH_NEGATIVE_OCCURRENCES);
+  assert.equal(affinityOccurrenceCount(sources.slice(0, 1), "director", 7), 1);
+  assert.equal(affinityOccurrenceCount(sources, "actor", 7), 0);
+});
+
 // --- v3 Part 1: centralized, configurable scoring weights ---
 
 test("SCORING_WEIGHTS is centralized (one exported config), not scattered magic numbers", () => {
@@ -259,10 +340,18 @@ test("SCORING_WEIGHTS is centralized (one exported config), not scattered magic 
     "popularityMax",
     "voteMax",
     "negativeGenre",
+    "negativeDirectorAffinity",
+    "negativeActorAffinity",
+    "negativeCompanyAffinity",
+    "negativeKeywordAffinity",
   ] as const) {
     assert.equal(typeof SCORING_WEIGHTS[key], "number", `SCORING_WEIGHTS.${key} should be a configured number`);
   }
   assert.ok(SCORING_WEIGHTS.negativeGenre < 0, "negative weight must actually be negative");
+  assert.ok(SCORING_WEIGHTS.negativeDirectorAffinity < 0);
+  assert.ok(SCORING_WEIGHTS.negativeActorAffinity < 0);
+  assert.ok(SCORING_WEIGHTS.negativeCompanyAffinity < 0);
+  assert.ok(SCORING_WEIGHTS.negativeKeywordAffinity < 0);
   assert.ok(SCORING_WEIGHTS.genreMatch < SCORING_WEIGHTS.keywordAffinity, "genre must be weighted below the new primary signals (v3 Part 1)");
   assert.ok(SCORING_WEIGHTS.genreMatch < SCORING_WEIGHTS.directorAffinity);
   assert.ok(SCORING_WEIGHTS.genreMatch < SCORING_WEIGHTS.favoriteSimilarity);

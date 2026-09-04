@@ -48,6 +48,7 @@ export function MovieCard({
   matchScore,
   matchReason,
   showActions = true,
+  onDismiss,
 }: {
   movie: TMDBMovie;
   isWatched: boolean;
@@ -62,6 +63,8 @@ export function MovieCard({
   matchReason?: string;
   /** Can be disabled for a read-only surface; movie and series lists normally enable it. */
   showActions?: boolean;
+  /** Recommendation-only negative feedback; omitted from ordinary search/catalog cards. */
+  onDismiss?: () => void;
 }) {
   const { visible: providerBadges, moreCount } = providers
     ? topProvidersForCard(providers)
@@ -167,6 +170,16 @@ export function MovieCard({
             <span className="shrink-0 text-[11px] font-medium opacity-50">{th.streaming.more(moreCount)}</span>
           )}
         </div>
+      )}
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label={th.dismissed.label(movie.title)}
+          className="mt-3 w-fit text-xs opacity-60 underline decoration-transparent underline-offset-2 transition hover:text-accent hover:decoration-current hover:opacity-100"
+        >
+          {th.dismissed.action}
+        </button>
       )}
     </article>
   );

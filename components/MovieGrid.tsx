@@ -20,6 +20,7 @@ export function MovieGrid({
   providersByMovieId,
   scoresByMovieId,
   reasonsByMovieId,
+  onDismissMovie,
 }: {
   movies: TMDBMovie[];
   emptyMessage?: string;
@@ -28,6 +29,8 @@ export function MovieGrid({
   scoresByMovieId?: Record<number, number>;
   /** Phase 4 - resolved Thai reason text per movie id, paired with scoresByMovieId. */
   reasonsByMovieId?: Record<number, string>;
+  /** Only personalized recommendations opt into negative-feedback controls. */
+  onDismissMovie?: (movieId: number) => void;
 }) {
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
@@ -63,6 +66,7 @@ export function MovieGrid({
             providers={providersByMovieId?.[movie.id]}
             matchScore={scoresByMovieId?.[movie.id]}
             matchReason={reasonsByMovieId?.[movie.id]}
+            onDismiss={onDismissMovie ? () => onDismissMovie(movie.id) : undefined}
           />
         </li>
       ))}

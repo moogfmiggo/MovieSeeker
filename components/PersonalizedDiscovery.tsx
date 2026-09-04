@@ -7,7 +7,7 @@ import type { TMDBMovie } from "@/types/tmdb";
 import { loadPreferences } from "@/lib/preferences";
 import { loadFavorites } from "@/lib/favorites";
 import { loadWatched } from "@/lib/watched";
-import { loadDismissed } from "@/lib/dismissed";
+import { loadDismissed, toggleDismissed } from "@/lib/dismissed";
 import {
   rankRecommendations,
   determineProfileState,
@@ -105,6 +105,11 @@ export function PersonalizedDiscovery() {
   const [providersByMovieId, setProvidersByMovieId] = useState<
     Record<number, WatchProviderSummary>
   >({});
+
+  function handleDismiss(movieId: number) {
+    toggleDismissed(movieId);
+    setRanked((current) => current.filter((item) => item.movie.id !== movieId));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -263,32 +268,42 @@ export function PersonalizedDiscovery() {
         <p className="text-sm opacity-70">{th.home.strongPattern(patternGenreNames)}</p>
       )}
 
-      <Link href={`/movies/${hero.movie.id}`} className="group block overflow-hidden rounded-xl border border-accent/50 bg-surface">
-        <div className="relative">
-          {hero.movie.backdrop_path && (
-            <div className="absolute inset-0">
-              <Image
-                src={`${BACKDROP_BASE_URL}${hero.movie.backdrop_path}`}
-                alt=""
-                fill
-                priority
-                sizes="100vw"
-                className="object-cover opacity-40 transition group-hover:opacity-50"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/80 to-surface/40" />
+      <div>
+        <Link href={`/movies/${hero.movie.id}`} className="group block overflow-hidden rounded-xl border border-accent/50 bg-surface">
+          <div className="relative">
+            {hero.movie.backdrop_path && (
+              <div className="absolute inset-0">
+                <Image
+                  src={`${BACKDROP_BASE_URL}${hero.movie.backdrop_path}`}
+                  alt=""
+                  fill
+                  priority
+                  sizes="100vw"
+                  className="object-cover opacity-40 transition group-hover:opacity-50"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/80 to-surface/40" />
+              </div>
+            )}
+            <div className="relative flex flex-col gap-2 p-6 sm:p-10">
+              <p className="text-xs font-medium uppercase tracking-wide text-accent">{th.home.heroEyebrow}</p>
+              <h1 className="text-2xl font-bold sm:text-4xl">{hero.movie.title}</h1>
+              <span className="w-fit rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
+                {th.home.matchScore(hero.score)}
+              </span>
+              <p className="mt-1 max-w-xl text-sm opacity-80">{explainMatchReason(hero.primaryReason)}</p>
+              <span className="mt-3 w-fit text-sm text-accent underline underline-offset-2">{th.home.viewDetails}</span>
             </div>
-          )}
-          <div className="relative flex flex-col gap-2 p-6 sm:p-10">
-            <p className="text-xs font-medium uppercase tracking-wide text-accent">{th.home.heroEyebrow}</p>
-            <h1 className="text-2xl font-bold sm:text-4xl">{hero.movie.title}</h1>
-            <span className="w-fit rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">
-              {th.home.matchScore(hero.score)}
-            </span>
-            <p className="mt-1 max-w-xl text-sm opacity-80">{explainMatchReason(hero.primaryReason)}</p>
-            <span className="mt-3 w-fit text-sm text-accent underline underline-offset-2">{th.home.viewDetails}</span>
           </div>
-        </div>
-      </Link>
+        </Link>
+        <button
+          type="button"
+          onClick={() => handleDismiss(hero.movie.id)}
+          aria-label={th.dismissed.label(hero.movie.title)}
+          className="mt-3 text-xs opacity-60 underline decoration-transparent underline-offset-2 transition hover:text-accent hover:decoration-current hover:opacity-100"
+        >
+          {th.dismissed.action}
+        </button>
+      </div>
 
       {gridMovies.length > 0 && (
         <div>
@@ -298,6 +313,7 @@ export function PersonalizedDiscovery() {
             providersByMovieId={providersByMovieId}
             scoresByMovieId={scoresByMovieId}
             reasonsByMovieId={reasonsByMovieId}
+            onDismissMovie={handleDismiss}
           />
         </div>
       )}

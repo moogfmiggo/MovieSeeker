@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
   getStreamingMovies,
-  getMovieById,
   getMovieDetails,
   getMovieRecommendations,
   discoverStreamingMovies,
@@ -13,10 +12,13 @@ import { FALLBACK_GENRES } from "@/lib/genres";
 import { movieDirectors, topBilledCast } from "@/lib/credits";
 import {
   mergeCandidatePools,
+  attachSignalsToExistingCandidates,
   buildAffinityProfile,
   MAX_FAVORITES_FOR_CREDIT_SIGNALS,
   MAX_FAVORITES_FOR_SIMILARITY,
   MAX_DISMISSED_FOR_NEGATIVE_SIGNAL,
+  MIN_RICH_NEGATIVE_OCCURRENCES,
+  affinityOccurrenceCount,
   type CandidatePool,
   type MovieSignalSource,
 } from "@/lib/recommendations-v2";
@@ -194,34 +196,132 @@ export async function GET(request: Request) {
       }
     }
 
-    // v3 - negative genre affinity (Part 1/6). Deliberately lighter than the
-    // favorites path above: getMovieById (not getMovieDetails) since only
-    // genre_ids are needed here, not credits/keywords - see the documented
-    // limitation on lib/recommendations-v2.ts's scoreCandidateMovie for why
-    // negative director/actor/company/keyword matching isn't implemented.
+    // Rich negative taste is bounded to the most recent dismissed titles.
+    // Discovery pools below only annotate candidates that already entered
+    // through positive pools; they never introduce disliked movies by themselves.
     let negativeGenreIds: number[] = [];
+    const negativeSignalPools: CandidatePool[] = [];
     if (dismissedIds.length > 0) {
       const recentDismissedIds = dismissedIds.slice(-MAX_DISMISSED_FOR_NEGATIVE_SIGNAL);
-      const dismissedSettled = await Promise.allSettled(recentDismissedIds.map((id) => getMovieById(id)));
+      const dismissedSettled = await Promise.allSettled(
+        recentDismissedIds.map((id) => getMovieDetails(id)),
+      );
       const dismissedSources: MovieSignalSource[] = [];
       for (const result of dismissedSettled) {
         if (result.status === "fulfilled") {
           dismissedSources.push({
-            genreIds: result.value.genre_ids,
-            directors: [],
-            topCast: [],
-            companies: [],
+            genreIds: result.value.genres.map((genre) => genre.id),
+            directors: movieDirectors(result.value.credits?.crew).map((person) => ({
+              id: person.id,
+              name: person.name,
+            })),
+            topCast: topBilledCast(result.value.credits?.cast, 5).map((person) => ({
+              id: person.id,
+              name: person.name,
+            })),
+            companies: result.value.production_companies.map((company) => ({
+              id: company.id,
+              name: company.name,
+            })),
+            keywords: result.value.keywords?.keywords ?? [],
           });
         } else {
-          logSoftFailure("dismissed movie genre fetch", result.reason);
+          logSoftFailure("dismissed movie detail fetch", result.reason);
         }
       }
       if (dismissedSources.length > 0) {
-        negativeGenreIds = buildAffinityProfile(dismissedSources).topGenreIds.slice(0, 5);
+        const negativeAffinity = buildAffinityProfile(dismissedSources);
+        negativeGenreIds = negativeAffinity.topGenreIds.slice(0, 5);
+        const negativeDirector = negativeAffinity.topDirector &&
+          affinityOccurrenceCount(dismissedSources, "director", negativeAffinity.topDirector.id) >= MIN_RICH_NEGATIVE_OCCURRENCES
+          ? negativeAffinity.topDirector
+          : null;
+        const negativeActor = negativeAffinity.topActor &&
+          affinityOccurrenceCount(dismissedSources, "actor", negativeAffinity.topActor.id) >= MIN_RICH_NEGATIVE_OCCURRENCES
+          ? negativeAffinity.topActor
+          : null;
+        const negativeCompany = negativeAffinity.topCompany &&
+          affinityOccurrenceCount(dismissedSources, "company", negativeAffinity.topCompany.id) >= MIN_RICH_NEGATIVE_OCCURRENCES
+          ? negativeAffinity.topCompany
+          : null;
+        const topNegativeKeyword = negativeAffinity.topKeywords[0];
+        const negativeKeyword = topNegativeKeyword &&
+          affinityOccurrenceCount(dismissedSources, "keyword", topNegativeKeyword.id) >= MIN_RICH_NEGATIVE_OCCURRENCES
+          ? topNegativeKeyword
+          : null;
+        const [directorPool, actorPool, companyPool, keywordPool] = await Promise.allSettled([
+          negativeDirector
+            ? discoverStreamingMovies({ directorId: negativeDirector.id })
+            : Promise.resolve(null),
+          negativeActor
+            ? discoverStreamingMovies({ castId: negativeActor.id })
+            : Promise.resolve(null),
+          negativeCompany
+            ? discoverStreamingMovies({ companyId: negativeCompany.id })
+            : Promise.resolve(null),
+          negativeKeyword
+            ? discoverStreamingMovies({ keywordIds: [negativeKeyword.id] })
+            : Promise.resolve(null),
+        ]);
+
+        if (directorPool.status === "fulfilled" && directorPool.value && negativeDirector) {
+          negativeSignalPools.push({
+            movies: directorPool.value.results,
+            signal: {
+              type: "negativeDirectorAffinity",
+              personId: negativeDirector.id,
+              personName: negativeDirector.name,
+            },
+          });
+        } else if (directorPool.status === "rejected") {
+          logSoftFailure("negative director discover", directorPool.reason);
+        }
+
+        if (actorPool.status === "fulfilled" && actorPool.value && negativeActor) {
+          negativeSignalPools.push({
+            movies: actorPool.value.results,
+            signal: {
+              type: "negativeActorAffinity",
+              personId: negativeActor.id,
+              personName: negativeActor.name,
+            },
+          });
+        } else if (actorPool.status === "rejected") {
+          logSoftFailure("negative actor discover", actorPool.reason);
+        }
+
+        if (companyPool.status === "fulfilled" && companyPool.value && negativeCompany) {
+          negativeSignalPools.push({
+            movies: companyPool.value.results,
+            signal: {
+              type: "negativeCompanyAffinity",
+              companyId: negativeCompany.id,
+              companyName: negativeCompany.name,
+            },
+          });
+        } else if (companyPool.status === "rejected") {
+          logSoftFailure("negative company discover", companyPool.reason);
+        }
+
+        if (keywordPool.status === "fulfilled" && keywordPool.value && negativeKeyword) {
+          negativeSignalPools.push({
+            movies: keywordPool.value.results,
+            signal: {
+              type: "negativeKeywordAffinity",
+              keywordId: negativeKeyword.id,
+              keywordName: negativeKeyword.name,
+            },
+          });
+        } else if (keywordPool.status === "rejected") {
+          logSoftFailure("negative keyword discover", keywordPool.reason);
+        }
       }
     }
 
-    const candidates = mergeCandidatePools(pools);
+    const candidates = attachSignalsToExistingCandidates(
+      mergeCandidatePools(pools),
+      negativeSignalPools,
+    );
     return NextResponse.json({
       candidates,
       genreMap,

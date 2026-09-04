@@ -73,6 +73,10 @@ export const th = {
     addLabel: (title: string) => `เพิ่ม "${title}" ในรายการโปรด`,
     removeLabel: (title: string) => `นำ "${title}" ออกจากรายการโปรด`,
   },
+  dismissed: {
+    action: "ไม่สนใจคำแนะนำนี้",
+    label: (title: string) => `ไม่สนใจคำแนะนำ “${title}”`,
+  },
   /** Phase 4: personalized discovery homepage (Parts 1, 2, 6, 7, 8). */
   home: {
     heroEyebrow: "หนังสตรีมมิ่งที่เหมาะกับคุณ",

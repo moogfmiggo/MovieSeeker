@@ -24,6 +24,10 @@ export type MatchedSignal =
    *  discover pool built from the user's favorites. Uses the same
    *  no-per-candidate-fetch pattern as director/actor/company affinity. */
   | { type: "keywordAffinity"; keywordId: number; keywordName: string }
+  | { type: "negativeDirectorAffinity"; personId: number; personName: string }
+  | { type: "negativeActorAffinity"; personId: number; personName: string }
+  | { type: "negativeCompanyAffinity"; companyId: number; companyName: string }
+  | { type: "negativeKeywordAffinity"; keywordId: number; keywordName: string }
   /** Generic provenance (preferred-genre discover, popularity fallback, ...).
    *  Carries no scoring weight of its own - genre/popularity/vote scoring is
    *  derived directly from the candidate's own fields regardless of which
@@ -76,6 +80,8 @@ export const MAX_FAVORITES_FOR_CREDIT_SIGNALS = 10;
 export const MAX_FAVORITES_FOR_SIMILARITY = 5;
 /** v3 - same bound, applied to dismissed movies for negative-genre extraction. */
 export const MAX_DISMISSED_FOR_NEGATIVE_SIGNAL = 10;
+/** Avoid inferring a rich dislike from one dismissed movie alone. */
+export const MIN_RICH_NEGATIVE_OCCURRENCES = 2;
 
 export function determineProfileState(input: {
   preferredGenreIds?: readonly number[] | null;
@@ -127,6 +133,61 @@ export function mergeCandidatePools(pools: readonly CandidatePool[] | null | und
   return [...byId.values()];
 }
 
+function matchedSignalKey(signal: MatchedSignal): string {
+  switch (signal.type) {
+    case "favoriteGenre":
+      return `${signal.type}:${signal.genreId}`;
+    case "favoriteSimilarity":
+      return `${signal.type}:${signal.favoriteMovieId}`;
+    case "directorAffinity":
+    case "actorAffinity":
+    case "negativeDirectorAffinity":
+    case "negativeActorAffinity":
+      return `${signal.type}:${signal.personId}`;
+    case "companyAffinity":
+    case "negativeCompanyAffinity":
+      return `${signal.type}:${signal.companyId}`;
+    case "keywordAffinity":
+    case "negativeKeywordAffinity":
+      return `${signal.type}:${signal.keywordId}`;
+    case "discoverPool":
+      return signal.type;
+  }
+}
+
+/**
+ * Adds signals only to candidates that already entered through a positive
+ * pool. This is crucial for negative discovery pools: they may identify
+ * disliked characteristics, but must never introduce disliked movies into
+ * the recommendation feed merely so they can be penalized.
+ */
+export function attachSignalsToExistingCandidates(
+  candidates: readonly CandidateMovie[] | null | undefined,
+  signalPools: readonly CandidatePool[] | null | undefined,
+): CandidateMovie[] {
+  if (!Array.isArray(candidates)) return [];
+  const result: CandidateMovie[] = (candidates as readonly CandidateMovie[]).map((candidate) => ({
+    ...candidate,
+    matchedSignals: [...(candidate.matchedSignals ?? [])],
+  }));
+  if (!Array.isArray(signalPools) || signalPools.length === 0) return result;
+
+  const byId = new Map(result.map((candidate) => [candidate.id, candidate]));
+  for (const pool of signalPools) {
+    if (!pool || !Array.isArray(pool.movies)) continue;
+    const signalKey = matchedSignalKey(pool.signal);
+    for (const movie of pool.movies) {
+      const candidate = byId.get(movie?.id);
+      if (!candidate) continue;
+      const alreadyAttached = candidate.matchedSignals.some(
+        (signal) => matchedSignalKey(signal) === signalKey,
+      );
+      if (!alreadyAttached) candidate.matchedSignals.push(pool.signal);
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Affinity extraction (which directors/actors/companies/genres/keywords a
 // set of movies leans toward). Used for BOTH polarities in v3: favorites
@@ -157,6 +218,27 @@ export interface AffinityProfile {
   topCompany: { id: number; name: string } | null;
   /** v3 - ranked by frequency desc, keyword id asc tie-break. */
   topKeywords: { id: number; name: string }[];
+}
+
+export type AffinityDimension = "director" | "actor" | "company" | "keyword";
+
+/** Counts in how many source movies an affinity appears (not raw duplicate entries). */
+export function affinityOccurrenceCount(
+  sources: readonly MovieSignalSource[] | null | undefined,
+  dimension: AffinityDimension,
+  id: number,
+): number {
+  if (!Array.isArray(sources)) return 0;
+  return (sources as readonly MovieSignalSource[]).reduce((count, source) => {
+    const entries = dimension === "director"
+      ? source.directors
+      : dimension === "actor"
+        ? source.topCast
+        : dimension === "company"
+          ? source.companies
+          : source.keywords;
+    return count + (Array.isArray(entries) && entries.some((entry) => entry?.id === id) ? 1 : 0);
+  }, 0);
 }
 
 function topByFrequency<T extends { id: number; name: string }>(
@@ -237,10 +319,7 @@ export function buildAffinityProfile(sources: readonly MovieSignalSource[] | nul
 // Watched movies contribute no scoring weight to *other* candidates (Part 4:
 // watched is context, not a positive preference - used only for exclusion
 // and determineProfileState). Dismissed movies now DO contribute a negative
-// genre signal (v3 Part 1/6) - see negativeGenreIds below - but that's the
-// only negative signal implemented so far; see the module-level limitation
-// note further down for why director/actor/company/keyword negative
-// matching isn't included yet.
+// genre signal and bounded negative director/actor/company/keyword pools.
 export const SCORING_WEIGHTS = {
   /** Per matching preferred/explicit genre, capped at genreMatchMaxGenres. */
   genreMatch: 6,
@@ -261,6 +340,11 @@ export const SCORING_WEIGHTS = {
   /** v3 - per matching genre frequent among the user's dismissed movies, capped at negativeGenreMaxGenres. Always <= 0. */
   negativeGenre: -10,
   negativeGenreMaxGenres: 2,
+  /** Negative affinities are silent ranking signals, never UI explanations. */
+  negativeDirectorAffinity: -14,
+  negativeActorAffinity: -10,
+  negativeCompanyAffinity: -5,
+  negativeKeywordAffinity: -12,
 } as const;
 
 function reasonKey(reason: MatchReason): string {
@@ -314,16 +398,10 @@ function toPlainMovie(candidate: CandidateMovie): TMDBMovie {
  * already-loaded movie on its detail page) as well as being the unit
  * rankRecommendations calls per-candidate.
  *
- * KNOWN LIMITATION (v3 Part 1/6, documented per the brief's own instruction
- * rather than faked): negative director/actor/company/keyword affinity is
- * NOT implemented. Doing so for an arbitrary candidate (one that wasn't
- * itself fetched via a director/cast/company/keyword discover pool) would
- * require fetching that candidate's own credits/keywords - a per-candidate
- * TMDB call, i.e. real N+1 risk across a 12-24 movie feed (Part 9 explicitly
- * warns against this). Negative genre works because every candidate already
- * carries genre_ids for free from any TMDB list/discover response - no
- * extra fetch needed, the same reason positive genre matching doesn't need
- * one either.
+ * Rich negative affinity is attached upstream from bounded TMDB discovery
+ * pools. That avoids fetching credits/keywords for every candidate (N+1)
+ * while still knowing when an existing positive candidate shares a disliked
+ * director, actor, company, or keyword.
  */
 export function scoreCandidateMovie(
   candidate: CandidateMovie,
@@ -388,6 +466,18 @@ export function scoreCandidateMovie(
       case "keywordAffinity":
         points += SCORING_WEIGHTS.keywordAffinity;
         addReason(reasons, seenKeys, { type: "keywordAffinity", keywordName: signal.keywordName });
+        break;
+      case "negativeDirectorAffinity":
+        points += SCORING_WEIGHTS.negativeDirectorAffinity;
+        break;
+      case "negativeActorAffinity":
+        points += SCORING_WEIGHTS.negativeActorAffinity;
+        break;
+      case "negativeCompanyAffinity":
+        points += SCORING_WEIGHTS.negativeCompanyAffinity;
+        break;
+      case "negativeKeywordAffinity":
+        points += SCORING_WEIGHTS.negativeKeywordAffinity;
         break;
       case "discoverPool":
         break;
