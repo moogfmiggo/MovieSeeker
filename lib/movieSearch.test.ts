@@ -28,10 +28,24 @@ test("buildMovieSearchHref carries official genres and curated topics", () => {
   );
 });
 
+test("buildMovieSearchHref carries streaming providers and opt-in series genres", () => {
+  assert.equal(
+    buildMovieSearchHref([28], [], [8, 337], [10759]),
+    "/movies?genres=28&providers=8,337&seriesGenres=10759",
+  );
+});
+
 test("buildMovieFeedApiHref keeps page and AND-search genres in the request", () => {
   assert.equal(
     buildMovieFeedApiHref(2, [10752, 99], ["true-story"]),
-    "/api/tmdb/feed?page=2&genres=10752%2C99&topics=true-story",
+    "/api/tmdb/feed?page=2&mediaType=movie&genres=10752%2C99&topics=true-story",
+  );
+});
+
+test("buildMovieFeedApiHref keeps TV opt-in and provider filters when loading more", () => {
+  assert.equal(
+    buildMovieFeedApiHref(3, [], [], [8], [10765, 9648], "tv"),
+    "/api/tmdb/feed?page=3&mediaType=tv&providers=8&seriesGenres=10765%2C9648",
   );
 });
 

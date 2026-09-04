@@ -1,17 +1,25 @@
 import { GenreSearchForm } from "@/components/GenreSearchForm";
 import { th } from "@/lib/i18n";
-import type { TMDBGenre } from "@/types/tmdb";
+import type { TMDBGenre, TMDBWatchProvider } from "@/types/tmdb";
 
 export function GenreSearchPanel({
   genres,
+  seriesGenres = [],
+  streamingProviders = [],
   initialSelectedGenreIds = [],
   initialSelectedTopicSlugs = [],
+  initialSelectedProviderIds = [],
+  initialSelectedSeriesGenreIds = [],
 }: {
   genres: TMDBGenre[];
+  seriesGenres?: TMDBGenre[];
+  streamingProviders?: TMDBWatchProvider[];
   initialSelectedGenreIds?: readonly number[];
   initialSelectedTopicSlugs?: readonly string[];
+  initialSelectedProviderIds?: readonly number[];
+  initialSelectedSeriesGenreIds?: readonly number[];
 }) {
-  const selectionKey = `${initialSelectedGenreIds.join(",")}|${initialSelectedTopicSlugs.join(",")}`;
+  const selectionKey = `${initialSelectedGenreIds.join(",")}|${initialSelectedTopicSlugs.join(",")}|${initialSelectedProviderIds.join(",")}|${initialSelectedSeriesGenreIds.join(",")}`;
 
   return (
     <section
@@ -24,8 +32,12 @@ export function GenreSearchPanel({
         <GenreSearchForm
           key={selectionKey}
           genres={genres}
+          seriesGenres={seriesGenres}
+          streamingProviders={streamingProviders}
           initialSelectedGenreIds={initialSelectedGenreIds}
           initialSelectedTopicSlugs={initialSelectedTopicSlugs}
+          initialSelectedProviderIds={initialSelectedProviderIds}
+          initialSelectedSeriesGenreIds={initialSelectedSeriesGenreIds}
         />
       </div>
     </section>

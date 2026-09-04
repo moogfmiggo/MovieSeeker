@@ -1,5 +1,6 @@
 import type { TMDBMovie } from "../types/tmdb";
 import { normalizeTopicSlugs } from "./movieTopics";
+import { normalizeStreamingProviderIds } from "./streamingProviders";
 
 /** TMDB supports at most a small, useful set of simultaneous genre filters. */
 const MAX_SELECTED_GENRES = 10;
@@ -42,12 +43,23 @@ export function buildMoviesHref(genreIds: unknown): string {
 }
 
 /** Builds a search URL carrying both official genres and keyword-backed topics. */
-export function buildMovieSearchHref(genreIds: unknown, topicSlugs: unknown): string {
+export function buildMovieSearchHref(
+  genreIds: unknown,
+  topicSlugs: unknown,
+  providerIds: unknown = [],
+  seriesGenreIds: unknown = [],
+): string {
   const normalizedGenres = normalizeGenreIds(genreIds);
   const normalizedTopics = normalizeTopicSlugs(topicSlugs);
+  const normalizedProviders = normalizeStreamingProviderIds(providerIds);
+  const normalizedSeriesGenres = normalizeGenreIds(seriesGenreIds);
   const queryParts: string[] = [];
   if (normalizedGenres.length > 0) queryParts.push(`genres=${normalizedGenres.join(",")}`);
   if (normalizedTopics.length > 0) queryParts.push(`topics=${normalizedTopics.join(",")}`);
+  if (normalizedProviders.length > 0) queryParts.push(`providers=${normalizedProviders.join(",")}`);
+  if (normalizedSeriesGenres.length > 0) {
+    queryParts.push(`seriesGenres=${normalizedSeriesGenres.join(",")}`);
+  }
   return queryParts.length > 0 ? `/movies?${queryParts.join("&")}` : "/movies";
 }
 
@@ -63,15 +75,29 @@ export function buildMovieFeedApiHref(
   page: unknown,
   genreIds: unknown,
   topicSlugs: unknown = [],
+  providerIds: unknown = [],
+  seriesGenreIds: unknown = [],
+  mediaType: "movie" | "tv" = "movie",
 ): string {
-  const params = new URLSearchParams({ page: String(normalizeMoviePage(page)) });
+  const params = new URLSearchParams({
+    page: String(normalizeMoviePage(page)),
+    mediaType,
+  });
   const normalizedGenreIds = normalizeGenreIds(genreIds);
   const normalizedTopics = normalizeTopicSlugs(topicSlugs);
+  const normalizedProviders = normalizeStreamingProviderIds(providerIds);
+  const normalizedSeriesGenres = normalizeGenreIds(seriesGenreIds);
   if (normalizedGenreIds.length > 0) {
     params.set("genres", normalizedGenreIds.join(","));
   }
   if (normalizedTopics.length > 0) {
     params.set("topics", normalizedTopics.join(","));
+  }
+  if (normalizedProviders.length > 0) {
+    params.set("providers", normalizedProviders.join(","));
+  }
+  if (normalizedSeriesGenres.length > 0) {
+    params.set("seriesGenres", normalizedSeriesGenres.join(","));
   }
   return `/api/tmdb/feed?${params.toString()}`;
 }

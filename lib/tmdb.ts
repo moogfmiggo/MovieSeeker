@@ -12,6 +12,10 @@ import type {
   TMDBPersonDetails,
   TMDBPersonMovieCreditsResponse,
   TMDBPopularMoviesResponse,
+  TMDBTVSeriesDetails,
+  TMDBTVSeriesResponse,
+  TMDBWatchProvider,
+  TMDBWatchProviderListResponse,
   TMDBWatchProvidersResponse,
 } from "@/types/tmdb";
 import { serializeDiscoverGenres, type GenreMatchMode } from "@/lib/movieSearch";
@@ -144,6 +148,82 @@ async function fetchThaiFirstMoviePage(
   // Thai data is still useful. A failed/slow optional fallback must not turn
   // a successful primary request into a failed or indefinitely stalled page.
   return mergeLocalizedMoviePage(thai, english);
+}
+
+interface TMDBRawTVSeries {
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  first_air_date: string;
+  vote_average: number;
+  vote_count: number;
+  popularity: number;
+  genre_ids: number[];
+  original_language: string;
+  original_name: string;
+  adult?: boolean;
+}
+
+interface TMDBRawTVSeriesPage {
+  page: number;
+  results: TMDBRawTVSeries[];
+  total_pages: number;
+  total_results: number;
+}
+
+function normalizeTVSeries(series: TMDBRawTVSeries): TMDBMovie {
+  return {
+    id: series.id,
+    title: series.name || series.original_name,
+    overview: series.overview,
+    poster_path: series.poster_path,
+    backdrop_path: series.backdrop_path,
+    release_date: series.first_air_date,
+    vote_average: series.vote_average,
+    vote_count: series.vote_count,
+    popularity: series.popularity,
+    genre_ids: series.genre_ids,
+    original_language: series.original_language,
+    original_title: series.original_name,
+    adult: series.adult ?? false,
+    video: false,
+    media_type: "tv",
+  };
+}
+
+async function fetchThaiFirstTVPage(
+  path: string,
+  searchParams: Record<string, string>,
+): Promise<TMDBTVSeriesResponse> {
+  const thai = await tmdbFetch<TMDBRawTVSeriesPage>(path, {
+    ...searchParams,
+    language: THAI_LANGUAGE,
+  });
+  const english = thai.results.some((series) => !series.name.trim() || !series.overview.trim())
+    ? await withTimeoutFallback(
+        tmdbFetch<TMDBRawTVSeriesPage>(path, {
+          ...searchParams,
+          language: ENGLISH_LANGUAGE,
+        }),
+        ENGLISH_FALLBACK_TIMEOUT_MS,
+        null,
+      )
+    : null;
+  const englishById = new Map((english?.results ?? []).map((series) => [series.id, series]));
+
+  return {
+    ...thai,
+    results: thai.results.map((series) => {
+      const fallback = englishById.get(series.id);
+      return normalizeTVSeries({
+        ...series,
+        name: series.name.trim() || fallback?.name || series.original_name,
+        overview: series.overview.trim() || fallback?.overview || "",
+      });
+    }),
+  };
 }
 
 /** Fetch TMDB's popular movies list, Thai first with bounded English fallback. */
@@ -297,6 +377,13 @@ export async function getMovieDetails(movieId: number): Promise<TMDBMovieDetails
   return mergeLocalizedMovieText(thai, english);
 }
 
+/** Fetch TMDB's TV genre list separately so series are always opt-in. */
+export async function getTVGenres(): Promise<TMDBGenreListResponse> {
+  return tmdbFetch<TMDBGenreListResponse>("/genre/tv/list", {
+    language: THAI_LANGUAGE,
+  });
+}
+
 /** Resolves curated topic slugs to TMDB keyword IDs, cached for one day. */
 export async function resolveMovieTopicKeywordIds(topicSlugs: unknown): Promise<number[]> {
   const topics = normalizeTopicSlugs(topicSlugs)
@@ -423,6 +510,8 @@ export interface DiscoverMoviesParams {
   keywordMatch?: GenreMatchMode;
   /** Restricts candidates to subscription/free/ad-supported streaming in this region. */
   streamingRegion?: string;
+  /** Restricts results to one or more selected streaming services (OR). */
+  providerIds?: number[];
   page?: number;
 }
 
@@ -465,11 +554,41 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
     searchParams.watch_region = params.streamingRegion;
     searchParams.with_watch_monetization_types = "flatrate|free|ads";
   }
+  if (params.providerIds && params.providerIds.length > 0) {
+    searchParams.watch_region = params.streamingRegion ?? DEFAULT_WATCH_REGION;
+    searchParams.with_watch_monetization_types = "flatrate|free|ads";
+    searchParams.with_watch_providers = params.providerIds.join("|");
+  }
   return fetchThaiFirstMoviePage(
     "/discover/movie",
     searchParams,
     { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
   );
+}
+
+export interface DiscoverTVSeriesParams {
+  genreIds: number[];
+  genreMatch?: GenreMatchMode;
+  providerIds?: number[];
+  streamingRegion?: string;
+  page?: number;
+}
+
+/** TV discovery is separate from movie discovery and only called after a TV genre is selected. */
+export async function discoverTVSeries(
+  params: DiscoverTVSeriesParams,
+): Promise<TMDBTVSeriesResponse> {
+  const searchParams: Record<string, string> = {
+    sort_by: "popularity.desc",
+    page: String(params.page ?? 1),
+    with_genres: serializeDiscoverGenres(params.genreIds, params.genreMatch ?? "all"),
+  };
+  if (params.providerIds && params.providerIds.length > 0) {
+    searchParams.watch_region = params.streamingRegion ?? DEFAULT_WATCH_REGION;
+    searchParams.with_watch_monetization_types = "flatrate|free|ads";
+    searchParams.with_watch_providers = params.providerIds.join("|");
+  }
+  return fetchThaiFirstTVPage("/discover/tv", searchParams);
 }
 
 /** Convenience wrapper for recommendation pools that must prefer streaming in Thailand. */
@@ -484,6 +603,27 @@ export async function discoverStreamingMovies(
 // fetch cache instead of refetched on every request.
 const WATCH_PROVIDERS_REVALIDATE_SECONDS = 60 * 60 * 6; // 6 hours
 
+/** Streaming services currently exposed by TMDB for viewers in Thailand. */
+export async function getStreamingProviderCatalog(
+  region: string = DEFAULT_WATCH_REGION,
+): Promise<TMDBWatchProvider[]> {
+  const data = await tmdbFetch<TMDBWatchProviderListResponse>(
+    "/watch/providers/movie",
+    { language: THAI_LANGUAGE, watch_region: region },
+    { revalidateSeconds: WATCH_PROVIDERS_REVALIDATE_SECONDS },
+  );
+  return data.results
+    .map((provider) => ({
+      provider_id: provider.provider_id,
+      provider_name: provider.provider_name,
+      logo_path: provider.logo_path,
+      display_priority:
+        provider.display_priorities?.[region] ?? provider.display_priority ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((a, b) => a.display_priority - b.display_priority)
+    .slice(0, 12);
+}
+
 /**
  * Fetch raw watch-provider data (all regions TMDB has) for one movie.
  * Server-side only. Shape it for display with summarizeWatchProviders from
@@ -492,6 +632,14 @@ const WATCH_PROVIDERS_REVALIDATE_SECONDS = 60 * 60 * 6; // 6 hours
 export async function getWatchProviders(movieId: number): Promise<TMDBWatchProvidersResponse> {
   return tmdbFetch<TMDBWatchProvidersResponse>(
     `/movie/${movieId}/watch/providers`,
+    {},
+    { revalidateSeconds: WATCH_PROVIDERS_REVALIDATE_SECONDS },
+  );
+}
+
+export async function getTVWatchProviders(seriesId: number): Promise<TMDBWatchProvidersResponse> {
+  return tmdbFetch<TMDBWatchProvidersResponse>(
+    `/tv/${seriesId}/watch/providers`,
     {},
     { revalidateSeconds: WATCH_PROVIDERS_REVALIDATE_SECONDS },
   );
@@ -522,4 +670,38 @@ export async function getWatchProvidersForMovies(
     }
   }
   return byMovieId;
+}
+
+export async function getWatchProvidersForTVSeries(
+  seriesIds: number[],
+): Promise<Record<number, TMDBWatchProvidersResponse>> {
+  const uniqueIds = [...new Set(seriesIds)];
+  const settled = await Promise.allSettled(
+    uniqueIds.map(async (id) => [id, await getTVWatchProviders(id)] as const),
+  );
+  const bySeriesId: Record<number, TMDBWatchProvidersResponse> = {};
+  for (const result of settled) {
+    if (result.status === "fulfilled") bySeriesId[result.value[0]] = result.value[1];
+  }
+  return bySeriesId;
+}
+
+export async function getTVSeriesDetails(seriesId: number): Promise<TMDBTVSeriesDetails> {
+  const params = { language: THAI_LANGUAGE, append_to_response: "credits" };
+  const thai = await tmdbFetch<TMDBTVSeriesDetails>(`/tv/${seriesId}`, params);
+  if (thai.name.trim() && thai.overview.trim()) return thai;
+  const english = await withTimeoutFallback(
+    tmdbFetch<TMDBTVSeriesDetails>(`/tv/${seriesId}`, {
+      language: ENGLISH_LANGUAGE,
+      append_to_response: "credits",
+    }),
+    ENGLISH_FALLBACK_TIMEOUT_MS,
+    null,
+  );
+  return {
+    ...thai,
+    name: thai.name.trim() || english?.name || thai.original_name,
+    overview: thai.overview.trim() || english?.overview || "",
+    tagline: thai.tagline?.trim() || english?.tagline || null,
+  };
 }

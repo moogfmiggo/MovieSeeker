@@ -1,8 +1,12 @@
 import {
   discoverMovies,
+  discoverTVSeries,
   getMovieGenres,
   getPopularMovies,
+  getStreamingProviderCatalog,
+  getTVGenres,
   getWatchProvidersForMovies,
+  getWatchProvidersForTVSeries,
   resolveMovieTopicKeywordIds,
   TMDBError,
 } from "@/lib/tmdb";
@@ -10,18 +14,15 @@ import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { withTimeoutFallback } from "@/lib/timeout";
 import { filterMoviesByAllGenres, normalizeGenreIds } from "@/lib/movieSearch";
 import { normalizeTopicSlugs } from "@/lib/movieTopics";
+import { normalizeStreamingProviderIds, FALLBACK_STREAMING_PROVIDERS } from "@/lib/streamingProviders";
 import { MovieList } from "@/components/MovieList";
 import { GenreSearchPanel } from "@/components/GenreSearchPanel";
-import { FALLBACK_GENRES } from "@/lib/genres";
+import { FALLBACK_GENRES, FALLBACK_TV_GENRES } from "@/lib/genres";
 import { th } from "@/lib/i18n";
-import type { TMDBGenre, TMDBPopularMoviesResponse } from "@/types/tmdb";
+import type { TMDBGenre, TMDBPopularMoviesResponse, TMDBWatchProvider } from "@/types/tmdb";
 
-// Always fetch live from TMDB at request time — never prerendered at build time.
 export const dynamic = "force-dynamic";
 
-// Watch-provider enrichment is nice-to-have (badges), not core content - if
-// TMDB is slow to answer for the ~20 movies on this page, the grid must
-// still render on time with no badges rather than wait indefinitely.
 const WATCH_PROVIDERS_TIMEOUT_MS = 3000;
 
 export default async function MoviesPage({
@@ -30,94 +31,164 @@ export default async function MoviesPage({
   searchParams: Promise<{
     genres?: string | string[];
     topics?: string | string[];
+    providers?: string | string[];
+    seriesGenres?: string | string[];
   }>;
 }) {
   const currentSearch = await searchParams;
   const selectedGenreIds = normalizeGenreIds(currentSearch.genres);
   const selectedTopicSlugs = normalizeTopicSlugs(currentSearch.topics);
-  const selectedFilterCount = selectedGenreIds.length + selectedTopicSlugs.length;
-  const hasFilters = selectedFilterCount > 0;
-  let movieData: TMDBPopularMoviesResponse;
-  let genres: TMDBGenre[];
+  const selectedProviderIds = normalizeStreamingProviderIds(currentSearch.providers);
+  const selectedSeriesGenreIds = normalizeGenreIds(currentSearch.seriesGenres);
+
+  const hasMovieChoice = selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0;
+  const includeSeries = selectedSeriesGenreIds.length > 0;
+  // Movies are the default. A series-only genre selection is the one case
+  // where the movie section is omitted rather than padded with generic titles.
+  const includeMovies = hasMovieChoice || !includeSeries;
+
+  let movieData: TMDBPopularMoviesResponse | null = null;
+  let seriesData: TMDBPopularMoviesResponse | null = null;
 
   try {
-    if (hasFilters) {
-      const keywordIds = await resolveMovieTopicKeywordIds(selectedTopicSlugs);
-      const data = await discoverMovies({
-        genreIds: selectedGenreIds,
-        genreMatch: "all",
-        keywordIds,
-        keywordMatch: "all",
-      });
-      movieData = {
-        ...data,
-        results: filterMoviesByAllGenres(data.results, selectedGenreIds),
-      };
-    } else {
-      movieData = await getPopularMovies();
-    }
+    const keywordIds = includeMovies
+      ? await resolveMovieTopicKeywordIds(selectedTopicSlugs)
+      : [];
+    [movieData, seriesData] = await Promise.all([
+      includeMovies
+        ? hasMovieChoice || selectedProviderIds.length > 0
+          ? discoverMovies({
+              genreIds: selectedGenreIds,
+              genreMatch: "all",
+              keywordIds,
+              keywordMatch: "all",
+              providerIds: selectedProviderIds,
+            }).then((data) => ({
+              ...data,
+              results: filterMoviesByAllGenres(data.results, selectedGenreIds),
+            }))
+          : getPopularMovies()
+        : Promise.resolve(null),
+      includeSeries
+        ? discoverTVSeries({
+            genreIds: selectedSeriesGenreIds,
+            genreMatch: "all",
+            providerIds: selectedProviderIds,
+          }).then((data) => ({
+            ...data,
+            results: filterMoviesByAllGenres(data.results, selectedSeriesGenreIds),
+          }))
+        : Promise.resolve(null),
+    ]);
   } catch (error) {
-    // Full detail (still token-free) goes to server logs only. The client
-    // only ever sees the generic message thrown below, via app/movies/error.tsx.
     console.error(
-      "[movies] failed to load movies:",
+      "[movies] failed to load catalog:",
       error instanceof Error ? error.message : "unknown error",
     );
-    throw new Error("Unable to load movies right now.");
+    throw new Error("Unable to load movies or series right now.");
   }
 
-  try {
-    genres = (await getMovieGenres()).genres;
-  } catch (error) {
+  const [movieGenresResult, seriesGenresResult, providerCatalogResult] = await Promise.allSettled([
+    getMovieGenres(),
+    getTVGenres(),
+    getStreamingProviderCatalog(),
+  ]);
+  const genres: TMDBGenre[] = movieGenresResult.status === "fulfilled"
+    ? movieGenresResult.value.genres
+    : FALLBACK_GENRES;
+  const seriesGenres: TMDBGenre[] = seriesGenresResult.status === "fulfilled"
+    ? seriesGenresResult.value.genres
+    : FALLBACK_TV_GENRES;
+  const streamingProviders: TMDBWatchProvider[] = providerCatalogResult.status === "fulfilled"
+    ? providerCatalogResult.value
+    : FALLBACK_STREAMING_PROVIDERS;
+
+  if (movieGenresResult.status === "rejected") {
+    const error = movieGenresResult.reason;
     console.error(
       "[movies] live TMDB genre fetch unavailable, using fallback list:",
       error instanceof TMDBError ? error.message : "unknown error",
     );
-    genres = FALLBACK_GENRES;
   }
 
-  const movies = movieData.results;
+  const movieProviders = movieData
+    ? summarizeWatchProvidersByMovie(await withTimeoutFallback(
+        getWatchProvidersForMovies(movieData.results.map((movie) => movie.id)),
+        WATCH_PROVIDERS_TIMEOUT_MS,
+        {},
+      ))
+    : {};
+  const seriesProviders = seriesData
+    ? summarizeWatchProvidersByMovie(await withTimeoutFallback(
+        getWatchProvidersForTVSeries(seriesData.results.map((series) => series.id)),
+        WATCH_PROVIDERS_TIMEOUT_MS,
+        {},
+      ))
+    : {};
 
-  // Never throws on its own (see getWatchProvidersForMovies) - a provider
-  // lookup failure for one or all movies just means no badges are shown.
-  // withTimeoutFallback bounds how long we additionally wait for it to
-  // finish: past WATCH_PROVIDERS_TIMEOUT_MS, we proceed with {} (no
-  // badges) rather than let a slow TMDB response hold up the whole page -
-  // it must never take down or stall the movies page.
-  const rawProviders = await withTimeoutFallback(
-    getWatchProvidersForMovies(movies.map((movie) => movie.id)),
-    WATCH_PROVIDERS_TIMEOUT_MS,
-    {},
-  );
-  const providersByMovieId = summarizeWatchProvidersByMovie(rawProviders);
+  const selectedMovieFilterCount = selectedGenreIds.length + selectedTopicSlugs.length;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
       <GenreSearchPanel
         genres={genres}
+        seriesGenres={seriesGenres}
+        streamingProviders={streamingProviders}
         initialSelectedGenreIds={selectedGenreIds}
         initialSelectedTopicSlugs={selectedTopicSlugs}
+        initialSelectedProviderIds={selectedProviderIds}
+        initialSelectedSeriesGenreIds={selectedSeriesGenreIds}
       />
 
-      <section className="mt-10">
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-          {hasFilters ? th.moviesPage.filteredTitle : th.moviesPage.title}
-        </h1>
-        <p className="mt-1 text-sm opacity-70">
-          {hasFilters
-            ? th.moviesPage.filteredSubtitle(selectedFilterCount)
-            : th.moviesPage.subtitle}
-        </p>
-        <MovieList
-          key={`${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}`}
-          movies={movies}
-          providersByMovieId={providersByMovieId}
-          selectedGenreIds={selectedGenreIds}
-          selectedTopicSlugs={selectedTopicSlugs}
-          initialPage={movieData.page}
-          totalPages={movieData.total_pages}
-        />
-      </section>
+      {movieData && (
+        <section className="mt-10">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {selectedMovieFilterCount > 0 || selectedProviderIds.length > 0
+              ? th.moviesPage.movieResultsTitle
+              : th.moviesPage.title}
+          </h1>
+          <p className="mt-1 text-sm opacity-70">
+            {selectedMovieFilterCount > 0
+              ? th.moviesPage.filteredSubtitle(selectedMovieFilterCount)
+              : selectedProviderIds.length > 0
+                ? th.genreSearch.streamingProvidersHint
+                : th.moviesPage.subtitle}
+          </p>
+          <MovieList
+            key={`movie|${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}|${selectedProviderIds.join(",")}`}
+            movies={movieData.results}
+            providersByMovieId={movieProviders}
+            selectedGenreIds={selectedGenreIds}
+            selectedTopicSlugs={selectedTopicSlugs}
+            selectedProviderIds={selectedProviderIds}
+            selectedSeriesGenreIds={selectedSeriesGenreIds}
+            initialPage={movieData.page}
+            totalPages={movieData.total_pages}
+          />
+        </section>
+      )}
+
+      {seriesData && (
+        <section className="mt-12 border-t border-border pt-10">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {th.moviesPage.seriesResultsTitle}
+          </h1>
+          <p className="mt-1 text-sm opacity-70">
+            {th.moviesPage.seriesResultsSubtitle(selectedSeriesGenreIds.length)}
+          </p>
+          <MovieList
+            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedProviderIds.join(",")}`}
+            movies={seriesData.results}
+            providersByMovieId={seriesProviders}
+            selectedProviderIds={selectedProviderIds}
+            selectedSeriesGenreIds={selectedSeriesGenreIds}
+            mediaType="tv"
+            emptyMessage={th.movieList.noSeriesFound}
+            initialPage={seriesData.page}
+            totalPages={seriesData.total_pages}
+          />
+        </section>
+      )}
     </main>
   );
 }

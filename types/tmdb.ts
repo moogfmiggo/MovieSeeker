@@ -13,6 +13,8 @@ export interface TMDBMovie {
   original_title: string;
   adult: boolean;
   video: boolean;
+  /** Present for normalized TV results so shared cards link to the right detail route. */
+  media_type?: "movie" | "tv";
 }
 
 export interface TMDBPopularMoviesResponse {
@@ -29,6 +31,32 @@ export interface TMDBGenre {
 
 export interface TMDBGenreListResponse {
   genres: TMDBGenre[];
+}
+
+/** TV results are normalized to the MovieCard-compatible shape at the API boundary. */
+export type TMDBTVSeriesResponse = TMDBPopularMoviesResponse;
+
+export interface TMDBTVSeriesDetails {
+  id: number;
+  name: string;
+  overview: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  first_air_date: string;
+  vote_average: number;
+  vote_count: number;
+  popularity: number;
+  genres: TMDBGenre[];
+  episode_run_time: number[];
+  tagline: string | null;
+  original_language: string;
+  original_name: string;
+  number_of_seasons: number;
+  number_of_episodes: number;
+  credits: {
+    cast: TMDBCastMember[];
+    crew: TMDBCrewMember[];
+  };
 }
 
 export interface TMDBProductionCompany {
@@ -132,6 +160,14 @@ export interface TMDBWatchProvider {
   provider_name: string;
   logo_path: string | null;
   display_priority: number;
+}
+
+export interface TMDBWatchProviderCatalogItem extends TMDBWatchProvider {
+  display_priorities?: Record<string, number>;
+}
+
+export interface TMDBWatchProviderListResponse {
+  results: TMDBWatchProviderCatalogItem[];
 }
 
 /** One region's watch-provider offer, as returned by TMDB (powered by JustWatch). */

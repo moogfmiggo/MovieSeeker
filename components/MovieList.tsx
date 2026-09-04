@@ -31,6 +31,10 @@ export function MovieList({
   providersByMovieId,
   selectedGenreIds = [],
   selectedTopicSlugs = [],
+  selectedProviderIds = [],
+  selectedSeriesGenreIds = [],
+  mediaType = "movie",
+  emptyMessage = th.movieList.noMoviesFound,
   initialPage = 1,
   totalPages = 1,
 }: {
@@ -38,6 +42,10 @@ export function MovieList({
   providersByMovieId?: Record<number, WatchProviderSummary>;
   selectedGenreIds?: readonly number[];
   selectedTopicSlugs?: readonly string[];
+  selectedProviderIds?: readonly number[];
+  selectedSeriesGenreIds?: readonly number[];
+  mediaType?: "movie" | "tv";
+  emptyMessage?: string;
   initialPage?: number;
   totalPages?: number;
 }) {
@@ -78,7 +86,14 @@ export function MovieList({
     setLoadMoreFailed(false);
     try {
       const response = await fetch(
-        buildMovieFeedApiHref(currentPage + 1, selectedGenreIds, selectedTopicSlugs),
+        buildMovieFeedApiHref(
+          currentPage + 1,
+          selectedGenreIds,
+          selectedTopicSlugs,
+          selectedProviderIds,
+          selectedSeriesGenreIds,
+          mediaType,
+        ),
       );
       if (!response.ok) throw new Error(`movie feed failed with status ${response.status}`);
 
@@ -96,22 +111,24 @@ export function MovieList({
     }
   }
 
-  const visibleMovies = showWatchedToo
+  const visibleMovies = mediaType === "tv"
+    ? loadedMovies
+    : showWatchedToo
     ? loadedMovies
     : filterUnwatched(loadedMovies, watchedIds);
-  const allWatched = visibleMovies.length === 0 && !showWatchedToo;
+  const allWatched = mediaType === "movie" && visibleMovies.length === 0 && !showWatchedToo;
   const hasMore = currentPage < availablePages;
 
   return (
     <div className="mt-6">
-      {(selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0) && (
+      {mediaType === "movie" && (selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0) && (
         <p className="mb-3 text-sm font-medium text-accent">
           {th.movieList.matchesAllSelectedGenres}
         </p>
       )}
 
       {loadedMovies.length === 0 ? (
-        <p className="text-sm opacity-70">{th.movieList.noMoviesFound}</p>
+        <p className="text-sm opacity-70">{emptyMessage}</p>
       ) : allWatched ? (
         <div className="rounded-lg border border-border p-6 text-center text-sm">
           <p>{th.movieList.allWatched}</p>
@@ -134,6 +151,7 @@ export function MovieList({
                 isFavorited={favoriteIds.includes(movie.id)}
                 onToggleFavorite={() => handleToggleFavorite(movie.id)}
                 providers={loadedProviders[movie.id]}
+                showActions={mediaType === "movie"}
               />
             </li>
           ))}

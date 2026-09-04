@@ -28,3 +28,23 @@ export const FALLBACK_GENRES: TMDBGenre[] = [
   { id: 10752, name: "สงคราม" },
   { id: 37, name: "ตะวันตก" },
 ];
+
+/** TMDB's TV genre taxonomy is intentionally separate from movie genres. */
+export const FALLBACK_TV_GENRES: TMDBGenre[] = [
+  { id: 10759, name: "แอ็คชั่นและผจญภัย" },
+  { id: 16, name: "แอนิเมชัน" },
+  { id: 35, name: "ตลก" },
+  { id: 80, name: "อาชญากรรม" },
+  { id: 99, name: "สารคดี" },
+  { id: 18, name: "ดราม่า" },
+  { id: 10751, name: "ครอบครัว" },
+  { id: 10762, name: "เด็ก" },
+  { id: 9648, name: "ลึกลับ" },
+  { id: 10763, name: "ข่าว" },
+  { id: 10764, name: "เรียลลิตี้" },
+  { id: 10765, name: "ไซไฟและแฟนตาซี" },
+  { id: 10766, name: "ละครโทรทัศน์" },
+  { id: 10767, name: "ทอล์กโชว์" },
+  { id: 10768, name: "สงครามและการเมือง" },
+  { id: 37, name: "ตะวันตก" },
+];

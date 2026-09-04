@@ -47,6 +47,7 @@ export function MovieCard({
   providers,
   matchScore,
   matchReason,
+  showActions = true,
 }: {
   movie: TMDBMovie;
   isWatched: boolean;
@@ -59,15 +60,18 @@ export function MovieCard({
   matchScore?: number;
   /** Phase 4 Part 6 - the single strongest reason, already resolved to Thai text. */
   matchReason?: string;
+  /** Series use separate identity/storage and intentionally omit movie-only actions for now. */
+  showActions?: boolean;
 }) {
   const { visible: providerBadges, moreCount } = providers
     ? topProvidersForCard(providers)
     : { visible: [], moreCount: 0 };
+  const detailHref = movie.media_type === "tv" ? `/series/${movie.id}` : `/movies/${movie.id}`;
 
   return (
     <article className="flex flex-col">
       <div className="relative aspect-[2/3] overflow-hidden rounded-lg bg-surface ring-1 ring-border">
-        <button
+        {showActions && <button
           type="button"
           onClick={(event) => {
             // This button is a sibling of the poster Link below, not nested
@@ -87,8 +91,8 @@ export function MovieCard({
           }`}
         >
           <HeartIcon filled={isFavorited} />
-        </button>
-        <button
+        </button>}
+        {showActions && <button
           type="button"
           onClick={onToggleWatched}
           aria-pressed={isWatched}
@@ -99,9 +103,9 @@ export function MovieCard({
           }`}
         >
           {isWatched ? th.watched.watched : th.watched.markWatched}
-        </button>
+        </button>}
         <Link
-          href={`/movies/${movie.id}`}
+          href={detailHref}
           className="block h-full w-full"
           aria-label={th.common.viewDetailsFor(movie.title)}
         >
@@ -133,7 +137,7 @@ export function MovieCard({
           )}
         </Link>
       </div>
-      <Link href={`/movies/${movie.id}`} className="mt-2 block">
+      <Link href={detailHref} className="mt-2 block">
         <h2 className="line-clamp-2 text-sm font-semibold hover:underline">{movie.title}</h2>
       </Link>
       {typeof matchScore === "number" && (
