@@ -18,6 +18,7 @@ import {
   toggleFavoriteSeries,
 } from "@/lib/favorites";
 import { buildMovieFeedApiHref, mergeMoviesById } from "@/lib/movieSearch";
+import { buildTitleSearchFeedApiHref } from "@/lib/titleSearch";
 import { th } from "@/lib/i18n";
 
 interface MovieFeedResponse {
@@ -45,6 +46,7 @@ export function MovieList({
   selectedProviderIds = [],
   selectedSeriesGenreIds = [],
   mediaType = "movie",
+  searchQuery = "",
   emptyMessage = th.movieList.noMoviesFound,
   initialPage = 1,
   totalPages = 1,
@@ -56,6 +58,7 @@ export function MovieList({
   selectedProviderIds?: readonly number[];
   selectedSeriesGenreIds?: readonly number[];
   mediaType?: "movie" | "tv";
+  searchQuery?: string;
   emptyMessage?: string;
   initialPage?: number;
   totalPages?: number;
@@ -97,14 +100,16 @@ export function MovieList({
     setLoadMoreFailed(false);
     try {
       const response = await fetch(
-        buildMovieFeedApiHref(
-          currentPage + 1,
-          selectedGenreIds,
-          selectedTopicSlugs,
-          selectedProviderIds,
-          selectedSeriesGenreIds,
-          mediaType,
-        ),
+        searchQuery
+          ? buildTitleSearchFeedApiHref(currentPage + 1, searchQuery, mediaType)
+          : buildMovieFeedApiHref(
+              currentPage + 1,
+              selectedGenreIds,
+              selectedTopicSlugs,
+              selectedProviderIds,
+              selectedSeriesGenreIds,
+              mediaType,
+            ),
       );
       if (!response.ok) throw new Error(`movie feed failed with status ${response.status}`);
 

@@ -246,6 +246,29 @@ export async function getPopularMovies(page = 1): Promise<TMDBPopularMoviesRespo
   );
 }
 
+/** Title search keeps movies and TV in separate, explicit user-selected modes. */
+export async function searchMovies(
+  query: string,
+  page = 1,
+): Promise<TMDBPopularMoviesResponse> {
+  return fetchThaiFirstMoviePage("/search/movie", {
+    query,
+    page: String(page),
+    include_adult: "false",
+  });
+}
+
+export async function searchTVSeries(
+  query: string,
+  page = 1,
+): Promise<TMDBTVSeriesResponse> {
+  return fetchThaiFirstTVPage("/search/tv", {
+    query,
+    page: String(page),
+    include_adult: "false",
+  });
+}
+
 /** Popular movies currently included with streaming access in Thailand. */
 export async function getStreamingMovies(
   page = 1,

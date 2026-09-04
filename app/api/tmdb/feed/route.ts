@@ -6,6 +6,8 @@ import {
   getWatchProvidersForMovies,
   getWatchProvidersForTVSeries,
   resolveMovieTopicKeywordIds,
+  searchMovies,
+  searchTVSeries,
   TMDBConfigError,
   TMDBError,
 } from "@/lib/tmdb";
@@ -18,6 +20,7 @@ import { summarizeWatchProvidersByMovie } from "@/lib/watchProviders";
 import { withTimeoutFallback } from "@/lib/timeout";
 import { normalizeTopicSlugs } from "@/lib/movieTopics";
 import { normalizeStreamingProviderIds } from "@/lib/streamingProviders";
+import { normalizeTitleSearchQuery } from "@/lib/titleSearch";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +33,20 @@ export async function GET(request: Request) {
   const selectedProviderIds = normalizeStreamingProviderIds(searchParams.get("providers"));
   const selectedSeriesGenreIds = normalizeGenreIds(searchParams.get("seriesGenres"));
   const mediaType = searchParams.get("mediaType") === "tv" ? "tv" : "movie";
+  const titleQuery = normalizeTitleSearchQuery(searchParams.get("query"));
   const hasFilters =
     selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0 || selectedProviderIds.length > 0;
   const requestedPage = normalizeMoviePage(searchParams.get("page"));
 
   try {
-    const keywordIds = mediaType === "movie"
+    const keywordIds = mediaType === "movie" && !titleQuery
       ? await resolveMovieTopicKeywordIds(selectedTopicSlugs)
       : [];
-    const data = mediaType === "tv"
+    const data = titleQuery
+      ? mediaType === "tv"
+        ? await searchTVSeries(titleQuery, requestedPage)
+        : await searchMovies(titleQuery, requestedPage)
+      : mediaType === "tv"
       ? selectedSeriesGenreIds.length > 0
         ? await discoverTVSeries({
             genreIds: selectedSeriesGenreIds,
@@ -57,7 +65,9 @@ export async function GET(request: Request) {
             page: requestedPage,
           })
         : await getPopularMovies(requestedPage);
-    const movies = mediaType === "tv"
+    const movies = titleQuery
+      ? data.results
+      : mediaType === "tv"
       ? filterMoviesByAllGenres(data.results, selectedSeriesGenreIds)
       : hasFilters
         ? filterMoviesByAllGenres(data.results, selectedGenreIds)

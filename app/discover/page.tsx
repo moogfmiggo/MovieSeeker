@@ -1,5 +1,6 @@
 import { PersonalizedDiscovery } from "@/components/PersonalizedDiscovery";
 import { GenreSearchPanel } from "@/components/GenreSearchPanel";
+import { TitleSearchPanel } from "@/components/TitleSearchPanel";
 import { getMovieGenres, getStreamingProviderCatalog, getTVGenres, TMDBError } from "@/lib/tmdb";
 import { FALLBACK_GENRES, FALLBACK_TV_GENRES } from "@/lib/genres";
 import { FALLBACK_STREAMING_PROVIDERS } from "@/lib/streamingProviders";
@@ -31,11 +32,14 @@ export default async function DiscoverPage() {
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+      <TitleSearchPanel />
+      <div className="mt-6">
       <GenreSearchPanel
         genres={genres}
         seriesGenres={seriesGenres}
         streamingProviders={streamingProviders}
       />
+      </div>
       <div className="mt-10">
         <PersonalizedDiscovery />
       </div>
