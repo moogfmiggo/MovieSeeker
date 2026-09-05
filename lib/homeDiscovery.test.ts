@@ -4,27 +4,27 @@ import { prioritizeStreamingCandidates } from "./homeDiscovery";
 
 test("prioritizeStreamingCandidates puts Thailand streaming titles first", () => {
   const ranked = [
-    { movie: { id: 1 }, score: 95 },
-    { movie: { id: 2 }, score: 90 },
-    { movie: { id: 3 }, score: 85 },
-    { movie: { id: 4 }, score: 80 },
+    { movie: { id: 1, vote_average: 9, vote_count: 100 }, score: 95 },
+    { movie: { id: 2, vote_average: 7, vote_count: 100 }, score: 90 },
+    { movie: { id: 3, vote_average: 8, vote_count: 100 }, score: 85 },
+    { movie: { id: 4, vote_average: 8, vote_count: 100 }, score: 80 },
   ];
 
   assert.deepEqual(
     prioritizeStreamingCandidates(ranked, [2, 4]).map((item) => item.movie.id),
-    [2, 4, 1, 3],
+    [4, 2, 1, 3],
   );
 });
 
-test("prioritizeStreamingCandidates preserves ranking within both groups", () => {
+test("prioritizeStreamingCandidates sorts by rating within both groups", () => {
   const ranked = [
-    { movie: { id: 7 }, score: 91 },
-    { movie: { id: 8 }, score: 87 },
-    { movie: { id: 9 }, score: 82 },
+    { movie: { id: 7, vote_average: 7, vote_count: 300 }, score: 91 },
+    { movie: { id: 8, vote_average: 9, vote_count: 100 }, score: 87 },
+    { movie: { id: 9, vote_average: 8, vote_count: 200 }, score: 82 },
   ];
 
   assert.deepEqual(
     prioritizeStreamingCandidates(ranked, [9, 7]).map((item) => item.movie.id),
-    [7, 9, 8],
+    [9, 7, 8],
   );
 });

@@ -155,6 +155,14 @@ export function MovieCard({
       )}
       {matchReason && <p className="mt-1 line-clamp-2 text-[11px] opacity-70">{matchReason}</p>}
       <p className="text-xs opacity-60">{formatReleaseDate(movie.release_date)}</p>
+      <p
+        className="mt-1 text-xs font-medium text-accent"
+        title={th.movieList.ratingLabel}
+      >
+        {movie.vote_count > 0
+          ? `★ ${movie.vote_average.toFixed(1)} · ${th.movieList.voteCount(movie.vote_count)}`
+          : th.movieList.unrated}
+      </p>
       <p className="mt-1 line-clamp-3 text-xs opacity-80">
         {movie.overview ? movie.overview : th.common.noDescription}
       </p>

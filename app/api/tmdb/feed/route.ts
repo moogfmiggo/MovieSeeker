@@ -32,6 +32,7 @@ export async function GET(request: Request) {
   const selectedTopicSlugs = normalizeTopicSlugs(searchParams.get("topics"));
   const selectedProviderIds = normalizeStreamingProviderIds(searchParams.get("providers"));
   const selectedSeriesGenreIds = normalizeGenreIds(searchParams.get("seriesGenres"));
+  const selectedSeriesTopicSlugs = normalizeTopicSlugs(searchParams.get("seriesTopics"));
   const mediaType = searchParams.get("mediaType") === "tv" ? "tv" : "movie";
   const titleQuery = normalizeTitleSearchQuery(searchParams.get("query"));
   const hasFilters =
@@ -39,18 +40,22 @@ export async function GET(request: Request) {
   const requestedPage = normalizeMoviePage(searchParams.get("page"));
 
   try {
-    const keywordIds = mediaType === "movie" && !titleQuery
-      ? await resolveMovieTopicKeywordIds(selectedTopicSlugs)
+    const keywordIds = !titleQuery
+      ? await resolveMovieTopicKeywordIds(
+          mediaType === "tv" ? selectedSeriesTopicSlugs : selectedTopicSlugs,
+        )
       : [];
     const data = titleQuery
       ? mediaType === "tv"
         ? await searchTVSeries(titleQuery, requestedPage)
         : await searchMovies(titleQuery, requestedPage)
       : mediaType === "tv"
-      ? selectedSeriesGenreIds.length > 0
+      ? selectedSeriesGenreIds.length > 0 || selectedSeriesTopicSlugs.length > 0
         ? await discoverTVSeries({
             genreIds: selectedSeriesGenreIds,
             genreMatch: "all",
+            keywordIds,
+            keywordMatch: "all",
             providerIds: selectedProviderIds,
             page: requestedPage,
           })
@@ -62,6 +67,7 @@ export async function GET(request: Request) {
             keywordIds,
             keywordMatch: "all",
             providerIds: selectedProviderIds,
+            sortByRating: true,
             page: requestedPage,
           })
         : await getPopularMovies(requestedPage);

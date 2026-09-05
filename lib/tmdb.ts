@@ -29,6 +29,7 @@ import {
   moviePageNeedsEnglishFallback,
   needsEnglishMovieFallback,
 } from "@/lib/tmdbLocalization";
+import { sortMoviePageByRating } from "@/lib/movieRating";
 
 const TMDB_API_BASE_URL = "https://api.themoviedb.org/3";
 const THAI_LANGUAGE = "th-TH";
@@ -274,7 +275,7 @@ export async function getStreamingMovies(
   page = 1,
   region: string = DEFAULT_WATCH_REGION,
 ): Promise<TMDBPopularMoviesResponse> {
-  return fetchThaiFirstMoviePage(
+  const pageData = await fetchThaiFirstMoviePage(
     "/discover/movie",
     {
       page: String(page),
@@ -284,6 +285,7 @@ export async function getStreamingMovies(
     },
     { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
   );
+  return sortMoviePageByRating(pageData);
 }
 
 /** Movies currently playing in cinemas, using Thailand's regional releases. */
@@ -291,11 +293,12 @@ export async function getNowPlayingMovies(
   page = 1,
   region: string = DEFAULT_WATCH_REGION,
 ): Promise<TMDBPopularMoviesResponse> {
-  return fetchThaiFirstMoviePage(
+  const pageData = await fetchThaiFirstMoviePage(
     "/movie/now_playing",
     { page: String(page), region },
     { revalidateSeconds: DISCOVERY_REVALIDATE_SECONDS },
   );
+  return sortMoviePageByRating(pageData);
 }
 
 /** Fetch TMDB's official movie genre list in Thai. Server-side only. */
@@ -582,6 +585,8 @@ export interface DiscoverMoviesParams {
   /** Restricts results to one or more selected streaming services (OR). */
   providerIds?: number[];
   page?: number;
+  /** Explicit catalog searches can request TMDB's global rating order. */
+  sortByRating?: boolean;
 }
 
 /**
@@ -593,7 +598,7 @@ export interface DiscoverMoviesParams {
  */
 export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDBPopularMoviesResponse> {
   const searchParams: Record<string, string> = {
-    sort_by: "popularity.desc",
+    sort_by: params.sortByRating ? "vote_average.desc" : "popularity.desc",
     page: String(params.page ?? 1),
   };
   if (params.genreIds && params.genreIds.length > 0) {
@@ -638,6 +643,8 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
 export interface DiscoverTVSeriesParams {
   genreIds: number[];
   genreMatch?: GenreMatchMode;
+  keywordIds?: number[];
+  keywordMatch?: GenreMatchMode;
   providerIds?: number[];
   streamingRegion?: string;
   page?: number;
@@ -648,10 +655,21 @@ export async function discoverTVSeries(
   params: DiscoverTVSeriesParams,
 ): Promise<TMDBTVSeriesResponse> {
   const searchParams: Record<string, string> = {
-    sort_by: "popularity.desc",
+    sort_by: "vote_average.desc",
     page: String(params.page ?? 1),
-    with_genres: serializeDiscoverGenres(params.genreIds, params.genreMatch ?? "all"),
   };
+  if (params.genreIds.length > 0) {
+    searchParams.with_genres = serializeDiscoverGenres(
+      params.genreIds,
+      params.genreMatch ?? "all",
+    );
+  }
+  if (params.keywordIds && params.keywordIds.length > 0) {
+    searchParams.with_keywords = serializeDiscoverGenres(
+      params.keywordIds,
+      params.keywordMatch ?? "all",
+    );
+  }
   if (params.providerIds && params.providerIds.length > 0) {
     searchParams.watch_region = params.streamingRegion ?? DEFAULT_WATCH_REGION;
     searchParams.with_watch_monetization_types = "flatrate|free|ads";

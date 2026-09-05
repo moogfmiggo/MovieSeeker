@@ -20,6 +20,7 @@ import {
 import { buildMovieFeedApiHref, mergeMoviesById } from "@/lib/movieSearch";
 import { buildTitleSearchFeedApiHref } from "@/lib/titleSearch";
 import { th } from "@/lib/i18n";
+import { sortMoviesByRating } from "@/lib/movieRating";
 
 interface MovieFeedResponse {
   results: TMDBMovie[];
@@ -45,6 +46,7 @@ export function MovieList({
   selectedTopicSlugs = [],
   selectedProviderIds = [],
   selectedSeriesGenreIds = [],
+  selectedSeriesTopicSlugs = [],
   mediaType = "movie",
   searchQuery = "",
   emptyMessage = th.movieList.noMoviesFound,
@@ -57,6 +59,7 @@ export function MovieList({
   selectedTopicSlugs?: readonly string[];
   selectedProviderIds?: readonly number[];
   selectedSeriesGenreIds?: readonly number[];
+  selectedSeriesTopicSlugs?: readonly string[];
   mediaType?: "movie" | "tv";
   searchQuery?: string;
   emptyMessage?: string;
@@ -66,7 +69,7 @@ export function MovieList({
   const [watchedIds, setWatchedIds] = useState<number[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<number[]>([]);
   const [showWatchedToo, setShowWatchedToo] = useState(false);
-  const [loadedMovies, setLoadedMovies] = useState(movies);
+  const [loadedMovies, setLoadedMovies] = useState(() => sortMoviesByRating(movies));
   const [loadedProviders, setLoadedProviders] = useState<Record<number, WatchProviderSummary>>(
     providersByMovieId ?? {},
   );
@@ -109,6 +112,7 @@ export function MovieList({
               selectedProviderIds,
               selectedSeriesGenreIds,
               mediaType,
+              selectedSeriesTopicSlugs,
             ),
       );
       if (!response.ok) throw new Error(`movie feed failed with status ${response.status}`);
@@ -116,7 +120,9 @@ export function MovieList({
       const data: unknown = await response.json();
       if (!isMovieFeedResponse(data)) throw new Error("invalid movie feed response");
 
-      setLoadedMovies((current) => mergeMoviesById(current, data.results));
+      setLoadedMovies((current) =>
+        sortMoviesByRating(mergeMoviesById(current, data.results)),
+      );
       setLoadedProviders((current) => ({ ...current, ...(data.providers ?? {}) }));
       setCurrentPage(data.page);
       setAvailablePages(data.totalPages);
@@ -135,6 +141,11 @@ export function MovieList({
 
   return (
     <div className="mt-6">
+      {loadedMovies.length > 0 && (
+        <p className="mb-3 text-xs text-muted">
+          {hasMore ? th.movieList.loadedRatingOrder : th.movieList.ratingOrder}
+        </p>
+      )}
       {mediaType === "movie" && (selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0) && (
         <p className="mb-3 text-sm font-medium text-accent">
           {th.movieList.matchesAllSelectedGenres}

@@ -17,6 +17,7 @@ import { normalizeTopicSlugs } from "@/lib/movieTopics";
 import { normalizeStreamingProviderIds, FALLBACK_STREAMING_PROVIDERS } from "@/lib/streamingProviders";
 import { MovieList } from "@/components/MovieList";
 import { GenreSearchPanel } from "@/components/GenreSearchPanel";
+import { TitleSearchPanel } from "@/components/TitleSearchPanel";
 import { FALLBACK_GENRES, FALLBACK_TV_GENRES } from "@/lib/genres";
 import { th } from "@/lib/i18n";
 import type { TMDBGenre, TMDBPopularMoviesResponse, TMDBWatchProvider } from "@/types/tmdb";
@@ -33,6 +34,7 @@ export default async function MoviesPage({
     topics?: string | string[];
     providers?: string | string[];
     seriesGenres?: string | string[];
+    seriesTopics?: string | string[];
   }>;
 }) {
   const currentSearch = await searchParams;
@@ -40,9 +42,11 @@ export default async function MoviesPage({
   const selectedTopicSlugs = normalizeTopicSlugs(currentSearch.topics);
   const selectedProviderIds = normalizeStreamingProviderIds(currentSearch.providers);
   const selectedSeriesGenreIds = normalizeGenreIds(currentSearch.seriesGenres);
+  const selectedSeriesTopicSlugs = normalizeTopicSlugs(currentSearch.seriesTopics);
 
   const hasMovieChoice = selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0;
-  const includeSeries = selectedSeriesGenreIds.length > 0;
+  const includeSeries =
+    selectedSeriesGenreIds.length > 0 || selectedSeriesTopicSlugs.length > 0;
   // Movies are the default. A series-only genre selection is the one case
   // where the movie section is omitted rather than padded with generic titles.
   const includeMovies = hasMovieChoice || !includeSeries;
@@ -51,9 +55,10 @@ export default async function MoviesPage({
   let seriesData: TMDBPopularMoviesResponse | null = null;
 
   try {
-    const keywordIds = includeMovies
-      ? await resolveMovieTopicKeywordIds(selectedTopicSlugs)
-      : [];
+    const [keywordIds, seriesKeywordIds] = await Promise.all([
+      includeMovies ? resolveMovieTopicKeywordIds(selectedTopicSlugs) : [],
+      includeSeries ? resolveMovieTopicKeywordIds(selectedSeriesTopicSlugs) : [],
+    ]);
     [movieData, seriesData] = await Promise.all([
       includeMovies
         ? hasMovieChoice || selectedProviderIds.length > 0
@@ -63,6 +68,7 @@ export default async function MoviesPage({
               keywordIds,
               keywordMatch: "all",
               providerIds: selectedProviderIds,
+              sortByRating: true,
             }).then((data) => ({
               ...data,
               results: filterMoviesByAllGenres(data.results, selectedGenreIds),
@@ -73,6 +79,8 @@ export default async function MoviesPage({
         ? discoverTVSeries({
             genreIds: selectedSeriesGenreIds,
             genreMatch: "all",
+            keywordIds: seriesKeywordIds,
+            keywordMatch: "all",
             providerIds: selectedProviderIds,
           }).then((data) => ({
             ...data,
@@ -130,15 +138,19 @@ export default async function MoviesPage({
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
-      <GenreSearchPanel
-        genres={genres}
-        seriesGenres={seriesGenres}
-        streamingProviders={streamingProviders}
-        initialSelectedGenreIds={selectedGenreIds}
-        initialSelectedTopicSlugs={selectedTopicSlugs}
-        initialSelectedProviderIds={selectedProviderIds}
-        initialSelectedSeriesGenreIds={selectedSeriesGenreIds}
-      />
+      <TitleSearchPanel />
+      <div className="mt-6">
+        <GenreSearchPanel
+          genres={genres}
+          seriesGenres={seriesGenres}
+          streamingProviders={streamingProviders}
+          initialSelectedGenreIds={selectedGenreIds}
+          initialSelectedTopicSlugs={selectedTopicSlugs}
+          initialSelectedProviderIds={selectedProviderIds}
+          initialSelectedSeriesGenreIds={selectedSeriesGenreIds}
+          initialSelectedSeriesTopicSlugs={selectedSeriesTopicSlugs}
+        />
+      </div>
 
       {movieData && (
         <section className="mt-10">
@@ -162,6 +174,7 @@ export default async function MoviesPage({
             selectedTopicSlugs={selectedTopicSlugs}
             selectedProviderIds={selectedProviderIds}
             selectedSeriesGenreIds={selectedSeriesGenreIds}
+            selectedSeriesTopicSlugs={selectedSeriesTopicSlugs}
             initialPage={movieData.page}
             totalPages={movieData.total_pages}
           />
@@ -174,14 +187,17 @@ export default async function MoviesPage({
             {th.moviesPage.seriesResultsTitle}
           </h1>
           <p className="mt-1 text-sm opacity-70">
-            {th.moviesPage.seriesResultsSubtitle(selectedSeriesGenreIds.length)}
+            {th.moviesPage.seriesResultsSubtitle(
+              selectedSeriesGenreIds.length + selectedSeriesTopicSlugs.length,
+            )}
           </p>
           <MovieList
-            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedProviderIds.join(",")}`}
+            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedSeriesTopicSlugs.join(",")}|${selectedProviderIds.join(",")}`}
             movies={seriesData.results}
             providersByMovieId={seriesProviders}
             selectedProviderIds={selectedProviderIds}
             selectedSeriesGenreIds={selectedSeriesGenreIds}
+            selectedSeriesTopicSlugs={selectedSeriesTopicSlugs}
             mediaType="tv"
             emptyMessage={th.movieList.noSeriesFound}
             initialPage={seriesData.page}

@@ -65,7 +65,6 @@ export default async function SearchPage({
       <TitleSearchPanel
         initialQuery={query}
         initialMediaType={mediaType}
-        compact
       />
 
       <section className="mt-10">

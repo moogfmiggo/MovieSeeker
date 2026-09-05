@@ -48,17 +48,22 @@ export function buildMovieSearchHref(
   topicSlugs: unknown,
   providerIds: unknown = [],
   seriesGenreIds: unknown = [],
+  seriesTopicSlugs: unknown = [],
 ): string {
   const normalizedGenres = normalizeGenreIds(genreIds);
   const normalizedTopics = normalizeTopicSlugs(topicSlugs);
   const normalizedProviders = normalizeStreamingProviderIds(providerIds);
   const normalizedSeriesGenres = normalizeGenreIds(seriesGenreIds);
+  const normalizedSeriesTopics = normalizeTopicSlugs(seriesTopicSlugs);
   const queryParts: string[] = [];
   if (normalizedGenres.length > 0) queryParts.push(`genres=${normalizedGenres.join(",")}`);
   if (normalizedTopics.length > 0) queryParts.push(`topics=${normalizedTopics.join(",")}`);
   if (normalizedProviders.length > 0) queryParts.push(`providers=${normalizedProviders.join(",")}`);
   if (normalizedSeriesGenres.length > 0) {
     queryParts.push(`seriesGenres=${normalizedSeriesGenres.join(",")}`);
+  }
+  if (normalizedSeriesTopics.length > 0) {
+    queryParts.push(`seriesTopics=${normalizedSeriesTopics.join(",")}`);
   }
   return queryParts.length > 0 ? `/movies?${queryParts.join("&")}` : "/movies";
 }
@@ -78,6 +83,7 @@ export function buildMovieFeedApiHref(
   providerIds: unknown = [],
   seriesGenreIds: unknown = [],
   mediaType: "movie" | "tv" = "movie",
+  seriesTopicSlugs: unknown = [],
 ): string {
   const params = new URLSearchParams({
     page: String(normalizeMoviePage(page)),
@@ -87,6 +93,7 @@ export function buildMovieFeedApiHref(
   const normalizedTopics = normalizeTopicSlugs(topicSlugs);
   const normalizedProviders = normalizeStreamingProviderIds(providerIds);
   const normalizedSeriesGenres = normalizeGenreIds(seriesGenreIds);
+  const normalizedSeriesTopics = normalizeTopicSlugs(seriesTopicSlugs);
   if (normalizedGenreIds.length > 0) {
     params.set("genres", normalizedGenreIds.join(","));
   }
@@ -98,6 +105,9 @@ export function buildMovieFeedApiHref(
   }
   if (normalizedSeriesGenres.length > 0) {
     params.set("seriesGenres", normalizedSeriesGenres.join(","));
+  }
+  if (normalizedSeriesTopics.length > 0) {
+    params.set("seriesTopics", normalizedSeriesTopics.join(","));
   }
   return `/api/tmdb/feed?${params.toString()}`;
 }

@@ -35,6 +35,13 @@ test("buildMovieSearchHref carries streaming providers and opt-in series genres"
   );
 });
 
+test("buildMovieSearchHref carries keyword-backed series themes", () => {
+  assert.equal(
+    buildMovieSearchHref([], [], [8], [], ["world-war-ii"]),
+    "/movies?providers=8&seriesTopics=world-war-ii",
+  );
+});
+
 test("buildMovieFeedApiHref keeps page and AND-search genres in the request", () => {
   assert.equal(
     buildMovieFeedApiHref(2, [10752, 99], ["true-story"]),
@@ -46,6 +53,13 @@ test("buildMovieFeedApiHref keeps TV opt-in and provider filters when loading mo
   assert.equal(
     buildMovieFeedApiHref(3, [], [], [8], [10765, 9648], "tv"),
     "/api/tmdb/feed?page=3&mediaType=tv&providers=8&seriesGenres=10765%2C9648",
+  );
+});
+
+test("buildMovieFeedApiHref keeps series themes when loading more", () => {
+  assert.equal(
+    buildMovieFeedApiHref(2, [], [], [], [], "tv", ["detective"]),
+    "/api/tmdb/feed?page=2&mediaType=tv&seriesTopics=detective",
   );
 });
 

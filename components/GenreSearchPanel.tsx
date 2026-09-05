@@ -10,6 +10,7 @@ export function GenreSearchPanel({
   initialSelectedTopicSlugs = [],
   initialSelectedProviderIds = [],
   initialSelectedSeriesGenreIds = [],
+  initialSelectedSeriesTopicSlugs = [],
 }: {
   genres: TMDBGenre[];
   seriesGenres?: TMDBGenre[];
@@ -18,8 +19,9 @@ export function GenreSearchPanel({
   initialSelectedTopicSlugs?: readonly string[];
   initialSelectedProviderIds?: readonly number[];
   initialSelectedSeriesGenreIds?: readonly number[];
+  initialSelectedSeriesTopicSlugs?: readonly string[];
 }) {
-  const selectionKey = `${initialSelectedGenreIds.join(",")}|${initialSelectedTopicSlugs.join(",")}|${initialSelectedProviderIds.join(",")}|${initialSelectedSeriesGenreIds.join(",")}`;
+  const selectionKey = `${initialSelectedGenreIds.join(",")}|${initialSelectedTopicSlugs.join(",")}|${initialSelectedProviderIds.join(",")}|${initialSelectedSeriesGenreIds.join(",")}|${initialSelectedSeriesTopicSlugs.join(",")}`;
 
   return (
     <section
@@ -38,6 +40,7 @@ export function GenreSearchPanel({
           initialSelectedTopicSlugs={initialSelectedTopicSlugs}
           initialSelectedProviderIds={initialSelectedProviderIds}
           initialSelectedSeriesGenreIds={initialSelectedSeriesGenreIds}
+          initialSelectedSeriesTopicSlugs={initialSelectedSeriesTopicSlugs}
         />
       </div>
     </section>

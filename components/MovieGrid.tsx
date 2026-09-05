@@ -7,6 +7,7 @@ import { MovieCard } from "@/components/MovieCard";
 import { loadWatched, toggleWatched } from "@/lib/watched";
 import { loadFavorites, toggleFavorite } from "@/lib/favorites";
 import { th } from "@/lib/i18n";
+import { sortMoviesByRating } from "@/lib/movieRating";
 
 /**
  * Renders a responsive grid of MovieCards wired to watched state - the same
@@ -55,7 +56,7 @@ export function MovieGrid({
 
   return (
     <ul className="mt-4 grid list-none grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-6 md:grid-cols-4 lg:grid-cols-5">
-      {movies.map((movie) => (
+      {sortMoviesByRating(movies).map((movie) => (
         <li key={movie.id}>
           <MovieCard
             movie={movie}

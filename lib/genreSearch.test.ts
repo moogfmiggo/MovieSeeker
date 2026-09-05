@@ -29,3 +29,9 @@ test("requires every word in a multi-word query to match", () => {
   assert.equal(matchesGenreSearch("time travel", ["เดินทางข้ามเวลา", "time travel"]), true);
   assert.equal(matchesGenreSearch("time horror", ["เดินทางข้ามเวลา", "time travel"]), false);
 });
+
+test("matches related Thai phrases through names and synonyms", () => {
+  assert.equal(matchesGenreSearch("สงคราม", ["สงครามโลกครั้งที่ 2"]), true);
+  assert.equal(matchesGenreSearch("สงครามโลก", ["ทหารและกองทัพ", "สงครามโลก"]), true);
+  assert.equal(matchesGenreSearch("รัก", ["โรแมนซ์", ...getMovieGenreSearchTerms(10749)]), true);
+});
