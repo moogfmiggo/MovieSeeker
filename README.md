@@ -34,3 +34,46 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## RTX AI Server
+
+MovieSeeker can use the locally installed `qwen3.5:9b` model to translate a
+Thai or English natural-language request into the site's existing TMDB Genre
+and keyword filters. Interactive requests are never queued: if the AI server
+is offline, busy, times out, or returns an invalid response, the Next.js route
+immediately uses the deterministic Genre interpreter and continues to TMDB.
+
+The browser never calls Ollama or the RTX machine directly:
+
+```text
+Browser -> Vercel /api/search/intent -> private RTX endpoint -> Ollama
+                                  \-> Genre fallback (no queue)
+```
+
+### Run locally
+
+Ollama must already be running with `qwen3.5:9b`. Set a long random shared
+secret in the terminal that starts the AI server, then run:
+
+```powershell
+$env:MOVIESEEKER_AI_TOKEN="replace-with-a-long-random-secret"
+npm run ai:server
+```
+
+The server binds to `127.0.0.1:4317`, warms the model, exposes `GET /health`,
+and accepts authenticated `POST /v1/intent` requests. It handles one LLM
+request at a time; concurrent requests receive `503`, which deliberately
+activates the Genre fallback instead of building a backlog.
+
+For local Next.js development, copy the relevant values from `.env.example`
+into `.env.local` and set:
+
+```text
+MOVIESEEKER_AI_SERVER_URL=http://127.0.0.1:4317
+MOVIESEEKER_AI_SERVER_TOKEN=replace-with-the-same-secret
+```
+
+For the public Vercel deployment, `MOVIESEEKER_AI_SERVER_URL` must be a private,
+HTTPS-protected route to this local service and the matching token must be set
+as a server-side Vercel environment variable. Do not expose Ollama port 11434
+or put either token in a `NEXT_PUBLIC_` variable.

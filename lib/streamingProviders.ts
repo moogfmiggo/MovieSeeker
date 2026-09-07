@@ -1,4 +1,4 @@
-import type { TMDBWatchProvider } from "@/types/tmdb";
+import type { TMDBWatchProvider } from "../types/tmdb";
 
 /** Used only when TMDB's Thailand provider catalog is temporarily unavailable. */
 export const FALLBACK_STREAMING_PROVIDERS: TMDBWatchProvider[] = [

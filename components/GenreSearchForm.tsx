@@ -1,16 +1,16 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { TMDBGenre, TMDBWatchProvider } from "@/types/tmdb";
 import { buildMovieSearchHref } from "@/lib/movieSearch";
 import { MOVIE_TOPICS } from "@/lib/movieTopics";
+import { normalizeGenreSearchText } from "@/lib/genreSearch";
 import {
-  getMovieGenreSearchTerms,
-  getSeriesGenreSearchTerms,
-  matchesGenreSearch,
-  normalizeGenreSearchText,
-} from "@/lib/genreSearch";
+  buildNaturalSearchHref,
+  interpretNaturalSearchFallback,
+  type SearchMediaType,
+} from "@/lib/naturalSearch";
 import { th } from "@/lib/i18n";
 
 export function GenreSearchForm({
@@ -22,6 +22,8 @@ export function GenreSearchForm({
   initialSelectedProviderIds = [],
   initialSelectedSeriesGenreIds = [],
   initialSelectedSeriesTopicSlugs = [],
+  initialQuery = "",
+  initialMediaType,
 }: {
   genres: TMDBGenre[];
   seriesGenres?: TMDBGenre[];
@@ -31,18 +33,21 @@ export function GenreSearchForm({
   initialSelectedProviderIds?: readonly number[];
   initialSelectedSeriesGenreIds?: readonly number[];
   initialSelectedSeriesTopicSlugs?: readonly string[];
+  initialQuery?: string;
+  initialMediaType?: SearchMediaType;
 }) {
   const router = useRouter();
   const inputId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [mediaType, setMediaType] = useState<"movie" | "tv">(
-    (initialSelectedSeriesGenreIds.length > 0 || initialSelectedSeriesTopicSlugs.length > 0) &&
+    initialMediaType ??
+    ((initialSelectedSeriesGenreIds.length > 0 || initialSelectedSeriesTopicSlugs.length > 0) &&
       initialSelectedGenreIds.length === 0 &&
       initialSelectedTopicSlugs.length === 0
       ? "tv"
-      : "movie",
+      : "movie"),
   );
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
+  const [isSearching, setIsSearching] = useState(false);
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([
     ...initialSelectedGenreIds,
   ]);
@@ -81,12 +86,6 @@ export function GenreSearchForm({
       name: genre.name,
       label: isSeries ? th.genreSearch.seriesGenreTag : th.genreSearch.movieGenreTag,
       selected: activeGenreIds.includes(genre.id),
-      terms: [
-        genre.name,
-        ...(isSeries
-          ? getSeriesGenreSearchTerms(genre.id)
-          : getMovieGenreSearchTerms(genre.id)),
-      ],
       toggle: () => toggleGenre(genre.id),
     })),
     ...MOVIE_TOPICS.map((topic) => ({
@@ -94,14 +93,10 @@ export function GenreSearchForm({
       name: topic.name,
       label: isSeries ? th.genreSearch.seriesTopicTag : th.genreSearch.movieTopicTag,
       selected: (isSeries ? selectedSeriesTopicSlugs : selectedTopicSlugs).includes(topic.slug),
-      terms: [topic.name, topic.keywordQuery, topic.slug, ...(topic.aliases ?? [])],
       toggle: () => toggleTopic(topic.slug),
     })),
   ];
   const selectedOptions = options.filter((option) => option.selected);
-  const results = options.filter(
-    (option) => !option.selected && matchesGenreSearch(query, option.terms),
-  );
   const hasQuery = !!normalizeGenreSearchText(query);
   const selectedCount = selectedOptions.length + selectedProviderIds.length;
   // A series URL requires at least one explicit TV genre. Provider-only URLs default to movies.
@@ -109,15 +104,45 @@ export function GenreSearchForm({
     ? selectedSeriesGenreIds.length + selectedSeriesTopicSlugs.length > 0
     : selectedCount > 0;
 
-  function selectOption(option: (typeof options)[number]) {
-    option.toggle();
-    setQuery("");
-    inputRef.current?.focus();
-  }
+  const canSubmit = hasQuery || canSearch;
 
-  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSearch) return;
+    if (!canSubmit || isSearching) return;
+
+    if (hasQuery) {
+      setIsSearching(true);
+      const preferredMediaType: SearchMediaType = isSeries ? "tv" : "movie";
+      try {
+        const response = await fetch("/api/search/intent", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            query,
+            preferredMediaType,
+            providerIds: selectedProviderIds,
+          }),
+        });
+        if (!response.ok) throw new Error(`intent search failed with status ${response.status}`);
+        const data: unknown = await response.json();
+        const href =
+          data && typeof data === "object" && typeof (data as { href?: unknown }).href === "string"
+            ? (data as { href: string }).href
+            : "";
+        if (!href.startsWith("/movies?")) throw new Error("invalid intent search response");
+        router.push(href);
+      } catch {
+        // The route itself may be unavailable during a deploy. Keep the same
+        // zero-queue guarantee by interpreting known Genre terms in-browser.
+        const fallback = interpretNaturalSearchFallback(query, preferredMediaType);
+        router.push(
+          buildNaturalSearchHref(fallback, query, "genre-fallback", selectedProviderIds),
+        );
+      } finally {
+        setIsSearching(false);
+      }
+      return;
+    }
 
     // Keep draft selections in both modes, while the URL contains only the active media type.
     router.push(
@@ -177,17 +202,13 @@ export function GenreSearchForm({
         </svg>
         <input
           id={inputId}
-          ref={inputRef}
           type="search"
+          maxLength={300}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) return;
             if (event.key === "Escape") setQuery("");
-            if (event.key === "Enter" && hasQuery) {
-              event.preventDefault();
-              if (results[0]) selectOption(results[0]);
-            }
           }}
           aria-describedby={`${inputId}-hint`}
           placeholder={
@@ -205,30 +226,8 @@ export function GenreSearchForm({
           : th.genreSearch.movieGenreSearchHint}
       </p>
       <p className="sr-only" aria-live="polite">
-        {hasQuery
-          ? th.genreSearch.resultCount(results.length)
-          : th.genreSearch.selectedCount(selectedCount)}
+        {isSearching ? th.genreSearch.interpreting : th.genreSearch.selectedCount(selectedCount)}
       </p>
-
-      {hasQuery &&
-        (results.length > 0 ? (
-          <ul className="cinematic-scrollbar mt-3 max-h-56 list-none space-y-1 overflow-y-auto rounded-xl border border-border bg-background p-1.5">
-            {results.map((option) => (
-              <li key={option.key}>
-                <button
-                  type="button"
-                  onClick={() => selectOption(option)}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-surface-hover focus-visible:bg-surface-hover"
-                >
-                  <span>{option.name}</span>
-                  <span className="text-xs text-muted">{option.label}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-3 text-sm text-muted">{th.genreSearch.noSearchResults}</p>
-        ))}
 
       {selectedOptions.length > 0 && (
         <ul
@@ -256,56 +255,63 @@ export function GenreSearchForm({
       )}
 
       {streamingProviders.length > 0 && (
-        <fieldset className="mt-6">
-          <legend className="text-xs font-semibold text-muted">
-            {th.genreSearch.streamingProviders}
-          </legend>
-          <p className="mt-1 text-xs text-muted">
-            {th.genreSearch.streamingProvidersHint}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {streamingProviders.map((provider) => {
-              const selected = selectedProviderIds.includes(provider.provider_id);
-              return (
-                <button
-                  key={provider.provider_id}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() =>
-                    setSelectedProviderIds((current) =>
+        <details className="mt-6 rounded-xl border border-border bg-background/40 p-4" defaultOpen={selectedProviderIds.length > 0}>
+          <summary className="cursor-pointer text-sm font-semibold text-muted">
+            {th.genreSearch.optionalStreamingProviders}
+          </summary>
+          <fieldset className="mt-4">
+            <legend className="sr-only">{th.genreSearch.streamingProviders}</legend>
+            <p className="text-xs text-muted">{th.genreSearch.streamingProvidersHint}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {streamingProviders.map((provider) => {
+                const selected = selectedProviderIds.includes(provider.provider_id);
+                return (
+                  <button
+                    key={provider.provider_id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() =>
+                      setSelectedProviderIds((current) =>
+                        selected
+                          ? current.filter((id) => id !== provider.provider_id)
+                          : [...current, provider.provider_id],
+                      )
+                    }
+                    className={`rounded-full border px-4 py-2 text-sm transition ${
                       selected
-                        ? current.filter((id) => id !== provider.provider_id)
-                        : [...current, provider.provider_id],
-                    )
-                  }
-                  className={`rounded-full border px-4 py-2 text-sm transition ${
-                    selected
-                      ? "border-accent bg-accent text-accent-foreground"
-                      : "border-border hover:border-border-strong"
-                  }`}
-                >
-                  {provider.provider_name}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : "border-border hover:border-border-strong"
+                    }`}
+                  >
+                    {provider.provider_name}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        </details>
       )}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={!canSearch}
+          disabled={!canSubmit || isSearching}
           className="rounded-full bg-accent px-7 py-3 text-sm font-semibold text-accent-foreground transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isSeries ? th.genreSearch.searchSeries : th.genreSearch.searchMovies}
+          {isSearching
+            ? th.genreSearch.interpreting
+            : isSeries
+              ? th.genreSearch.searchSeries
+              : th.genreSearch.searchMovies}
         </button>
         <span className="text-xs text-muted">
-          {canSearch
-            ? th.genreSearch.selectedCount(selectedCount)
-            : isSeries
-              ? th.genreSearch.selectSeriesGenre
-              : th.genreSearch.selectAtLeastOne}
+          {hasQuery
+            ? th.genreSearch.oneStepHint
+            : canSearch
+              ? th.genreSearch.selectedCount(selectedCount)
+              : isSeries
+                ? th.genreSearch.selectSeriesGenre
+                : th.genreSearch.selectAtLeastOne}
         </span>
       </div>
     </form>

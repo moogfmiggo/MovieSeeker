@@ -13,6 +13,7 @@ export interface MovieTopic {
  * producing real Discover filters instead of cosmetic UI-only categories.
  */
 export const MOVIE_TOPICS: readonly MovieTopic[] = [
+  { slug: "romantic-comedy", name: "โรแมนติกคอมเมดี้", keywordQuery: "romantic comedy", aliases: ["รอมคอม", "romcom", "rom-com"] },
   { slug: "superhero", name: "ซูเปอร์ฮีโร่", keywordQuery: "superhero", aliases: ["ฮีโร่", "ยอดมนุษย์"] },
   { slug: "zombie", name: "ซอมบี้", keywordQuery: "zombie" },
   { slug: "vampire", name: "แวมไพร์", keywordQuery: "vampire" },

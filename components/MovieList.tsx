@@ -49,6 +49,7 @@ export function MovieList({
   selectedSeriesTopicSlugs = [],
   mediaType = "movie",
   searchQuery = "",
+  originCountry = "",
   emptyMessage = th.movieList.noMoviesFound,
   initialPage = 1,
   totalPages = 1,
@@ -62,6 +63,7 @@ export function MovieList({
   selectedSeriesTopicSlugs?: readonly string[];
   mediaType?: "movie" | "tv";
   searchQuery?: string;
+  originCountry?: string;
   emptyMessage?: string;
   initialPage?: number;
   totalPages?: number;
@@ -113,6 +115,7 @@ export function MovieList({
               selectedSeriesGenreIds,
               mediaType,
               selectedSeriesTopicSlugs,
+              originCountry,
             ),
       );
       if (!response.ok) throw new Error(`movie feed failed with status ${response.status}`);

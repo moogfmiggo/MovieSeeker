@@ -2,7 +2,7 @@
 // so the recommendation engine can resolve genre names without duplicating
 // this list a second time.
 
-import type { TMDBGenre } from "@/types/tmdb";
+import type { TMDBGenre } from "../types/tmdb";
 
 // TMDB's official Thai movie genre list (id/name pairs are TMDB's own,
 // stable for years). Used only if a live call can't complete - so callers

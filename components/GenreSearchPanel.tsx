@@ -1,5 +1,6 @@
 import { GenreSearchForm } from "@/components/GenreSearchForm";
 import { th } from "@/lib/i18n";
+import type { SearchMediaType } from "@/lib/naturalSearch";
 import type { TMDBGenre, TMDBWatchProvider } from "@/types/tmdb";
 
 export function GenreSearchPanel({
@@ -11,6 +12,8 @@ export function GenreSearchPanel({
   initialSelectedProviderIds = [],
   initialSelectedSeriesGenreIds = [],
   initialSelectedSeriesTopicSlugs = [],
+  initialQuery = "",
+  initialMediaType,
 }: {
   genres: TMDBGenre[];
   seriesGenres?: TMDBGenre[];
@@ -20,8 +23,10 @@ export function GenreSearchPanel({
   initialSelectedProviderIds?: readonly number[];
   initialSelectedSeriesGenreIds?: readonly number[];
   initialSelectedSeriesTopicSlugs?: readonly string[];
+  initialQuery?: string;
+  initialMediaType?: SearchMediaType;
 }) {
-  const selectionKey = `${initialSelectedGenreIds.join(",")}|${initialSelectedTopicSlugs.join(",")}|${initialSelectedProviderIds.join(",")}|${initialSelectedSeriesGenreIds.join(",")}|${initialSelectedSeriesTopicSlugs.join(",")}`;
+  const selectionKey = `${initialSelectedGenreIds.join(",")}|${initialSelectedTopicSlugs.join(",")}|${initialSelectedProviderIds.join(",")}|${initialSelectedSeriesGenreIds.join(",")}|${initialSelectedSeriesTopicSlugs.join(",")}|${initialMediaType ?? ""}|${initialQuery}`;
 
   return (
     <section
@@ -41,6 +46,8 @@ export function GenreSearchPanel({
           initialSelectedProviderIds={initialSelectedProviderIds}
           initialSelectedSeriesGenreIds={initialSelectedSeriesGenreIds}
           initialSelectedSeriesTopicSlugs={initialSelectedSeriesTopicSlugs}
+          initialQuery={initialQuery}
+          initialMediaType={initialMediaType}
         />
       </div>
     </section>

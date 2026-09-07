@@ -35,8 +35,14 @@ export async function GET(request: Request) {
   const selectedSeriesTopicSlugs = normalizeTopicSlugs(searchParams.get("seriesTopics"));
   const mediaType = searchParams.get("mediaType") === "tv" ? "tv" : "movie";
   const titleQuery = normalizeTitleSearchQuery(searchParams.get("query"));
+  const originCountry = /^[A-Z]{2}$/.test(searchParams.get("origin") ?? "")
+    ? searchParams.get("origin") ?? undefined
+    : undefined;
   const hasFilters =
-    selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0 || selectedProviderIds.length > 0;
+    selectedGenreIds.length > 0 ||
+    selectedTopicSlugs.length > 0 ||
+    selectedProviderIds.length > 0 ||
+    !!originCountry;
   const requestedPage = normalizeMoviePage(searchParams.get("page"));
 
   try {
@@ -50,13 +56,17 @@ export async function GET(request: Request) {
         ? await searchTVSeries(titleQuery, requestedPage)
         : await searchMovies(titleQuery, requestedPage)
       : mediaType === "tv"
-      ? selectedSeriesGenreIds.length > 0 || selectedSeriesTopicSlugs.length > 0
+      ? selectedSeriesGenreIds.length > 0 ||
+        selectedSeriesTopicSlugs.length > 0 ||
+        selectedProviderIds.length > 0 ||
+        !!originCountry
         ? await discoverTVSeries({
             genreIds: selectedSeriesGenreIds,
             genreMatch: "all",
             keywordIds,
             keywordMatch: "all",
             providerIds: selectedProviderIds,
+            originCountry,
             page: requestedPage,
           })
         : { page: requestedPage, results: [], total_pages: 1, total_results: 0 }
@@ -67,6 +77,7 @@ export async function GET(request: Request) {
             keywordIds,
             keywordMatch: "all",
             providerIds: selectedProviderIds,
+            originCountry,
             sortByRating: true,
             page: requestedPage,
           })

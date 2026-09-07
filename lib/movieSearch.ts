@@ -84,6 +84,7 @@ export function buildMovieFeedApiHref(
   seriesGenreIds: unknown = [],
   mediaType: "movie" | "tv" = "movie",
   seriesTopicSlugs: unknown = [],
+  originCountry: unknown = "",
 ): string {
   const params = new URLSearchParams({
     page: String(normalizeMoviePage(page)),
@@ -108,6 +109,9 @@ export function buildMovieFeedApiHref(
   }
   if (normalizedSeriesTopics.length > 0) {
     params.set("seriesTopics", normalizedSeriesTopics.join(","));
+  }
+  if (typeof originCountry === "string" && /^[A-Z]{2}$/.test(originCountry)) {
+    params.set("origin", originCountry);
   }
   return `/api/tmdb/feed?${params.toString()}`;
 }

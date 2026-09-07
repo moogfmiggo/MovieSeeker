@@ -35,6 +35,11 @@ export default async function MoviesPage({
     providers?: string | string[];
     seriesGenres?: string | string[];
     seriesTopics?: string | string[];
+    media?: string | string[];
+    mode?: string | string[];
+    origin?: string | string[];
+    q?: string | string[];
+    unresolved?: string | string[];
   }>;
 }) {
   const currentSearch = await searchParams;
@@ -43,13 +48,39 @@ export default async function MoviesPage({
   const selectedProviderIds = normalizeStreamingProviderIds(currentSearch.providers);
   const selectedSeriesGenreIds = normalizeGenreIds(currentSearch.seriesGenres);
   const selectedSeriesTopicSlugs = normalizeTopicSlugs(currentSearch.seriesTopics);
+  const naturalQuery = (Array.isArray(currentSearch.q) ? currentSearch.q[0] : currentSearch.q)
+    ?.trim()
+    .slice(0, 300) ?? "";
+  const explicitMediaType =
+    (Array.isArray(currentSearch.media) ? currentSearch.media[0] : currentSearch.media) === "tv"
+      ? "tv"
+      : (Array.isArray(currentSearch.media) ? currentSearch.media[0] : currentSearch.media) === "movie"
+        ? "movie"
+        : undefined;
+  const searchMode =
+    (Array.isArray(currentSearch.mode) ? currentSearch.mode[0] : currentSearch.mode) === "ai"
+      ? "ai"
+      : "genre-fallback";
+  const rawOrigin = Array.isArray(currentSearch.origin) ? currentSearch.origin[0] : currentSearch.origin;
+  const originCountry = typeof rawOrigin === "string" && /^[A-Z]{2}$/.test(rawOrigin)
+    ? rawOrigin
+    : undefined;
+  const hasUnresolvedConstraints =
+    (Array.isArray(currentSearch.unresolved)
+      ? currentSearch.unresolved[0]
+      : currentSearch.unresolved) === "1";
 
-  const hasMovieChoice = selectedGenreIds.length > 0 || selectedTopicSlugs.length > 0;
+  const hasMovieChoice =
+    selectedGenreIds.length > 0 ||
+    selectedTopicSlugs.length > 0 ||
+    (explicitMediaType === "movie" && !!originCountry);
   const includeSeries =
-    selectedSeriesGenreIds.length > 0 || selectedSeriesTopicSlugs.length > 0;
+    explicitMediaType === "tv" ||
+    selectedSeriesGenreIds.length > 0 ||
+    selectedSeriesTopicSlugs.length > 0;
   // Movies are the default. A series-only genre selection is the one case
   // where the movie section is omitted rather than padded with generic titles.
-  const includeMovies = hasMovieChoice || !includeSeries;
+  const includeMovies = explicitMediaType === "movie" || hasMovieChoice || !includeSeries;
 
   let movieData: TMDBPopularMoviesResponse | null = null;
   let seriesData: TMDBPopularMoviesResponse | null = null;
@@ -68,6 +99,7 @@ export default async function MoviesPage({
               keywordIds,
               keywordMatch: "all",
               providerIds: selectedProviderIds,
+              originCountry,
               sortByRating: true,
             }).then((data) => ({
               ...data,
@@ -82,6 +114,7 @@ export default async function MoviesPage({
             keywordIds: seriesKeywordIds,
             keywordMatch: "all",
             providerIds: selectedProviderIds,
+            originCountry,
           }).then((data) => ({
             ...data,
             results: filterMoviesByAllGenres(data.results, selectedSeriesGenreIds),
@@ -149,25 +182,35 @@ export default async function MoviesPage({
           initialSelectedProviderIds={selectedProviderIds}
           initialSelectedSeriesGenreIds={selectedSeriesGenreIds}
           initialSelectedSeriesTopicSlugs={selectedSeriesTopicSlugs}
+          initialQuery={naturalQuery}
+          initialMediaType={explicitMediaType}
         />
       </div>
 
       {movieData && (
         <section className="mt-10">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            {selectedMovieFilterCount > 0 || selectedProviderIds.length > 0
+            {naturalQuery
+              ? th.moviesPage.naturalSearch(naturalQuery)
+              : selectedMovieFilterCount > 0 || selectedProviderIds.length > 0
               ? th.moviesPage.movieResultsTitle
               : th.moviesPage.title}
           </h1>
           <p className="mt-1 text-sm opacity-70">
-            {selectedMovieFilterCount > 0
+            {naturalQuery
+              ? hasUnresolvedConstraints
+                ? th.moviesPage.semanticNotApplied
+                : searchMode === "ai"
+                ? th.moviesPage.aiInterpretation
+                : th.moviesPage.genreFallback
+              : selectedMovieFilterCount > 0
               ? th.moviesPage.filteredSubtitle(selectedMovieFilterCount)
               : selectedProviderIds.length > 0
                 ? th.genreSearch.streamingProvidersHint
                 : th.moviesPage.subtitle}
           </p>
           <MovieList
-            key={`movie|${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}|${selectedProviderIds.join(",")}`}
+            key={`movie|${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}`}
             movies={movieData.results}
             providersByMovieId={movieProviders}
             selectedGenreIds={selectedGenreIds}
@@ -177,6 +220,7 @@ export default async function MoviesPage({
             selectedSeriesTopicSlugs={selectedSeriesTopicSlugs}
             initialPage={movieData.page}
             totalPages={movieData.total_pages}
+            originCountry={originCountry}
           />
         </section>
       )}
@@ -184,15 +228,21 @@ export default async function MoviesPage({
       {seriesData && (
         <section className="mt-12 border-t border-border pt-10">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            {th.moviesPage.seriesResultsTitle}
+            {naturalQuery ? th.moviesPage.naturalSearch(naturalQuery) : th.moviesPage.seriesResultsTitle}
           </h1>
           <p className="mt-1 text-sm opacity-70">
-            {th.moviesPage.seriesResultsSubtitle(
-              selectedSeriesGenreIds.length + selectedSeriesTopicSlugs.length,
-            )}
+            {naturalQuery
+              ? hasUnresolvedConstraints
+                ? th.moviesPage.semanticNotApplied
+                : searchMode === "ai"
+                ? th.moviesPage.aiInterpretation
+                : th.moviesPage.genreFallback
+              : th.moviesPage.seriesResultsSubtitle(
+                  selectedSeriesGenreIds.length + selectedSeriesTopicSlugs.length,
+                )}
           </p>
           <MovieList
-            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedSeriesTopicSlugs.join(",")}|${selectedProviderIds.join(",")}`}
+            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedSeriesTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}`}
             movies={seriesData.results}
             providersByMovieId={seriesProviders}
             selectedProviderIds={selectedProviderIds}
@@ -202,6 +252,7 @@ export default async function MoviesPage({
             emptyMessage={th.movieList.noSeriesFound}
             initialPage={seriesData.page}
             totalPages={seriesData.total_pages}
+            originCountry={originCountry}
           />
         </section>
       )}

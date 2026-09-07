@@ -63,6 +63,13 @@ test("buildMovieFeedApiHref keeps series themes when loading more", () => {
   );
 });
 
+test("buildMovieFeedApiHref preserves a natural-search origin country", () => {
+  assert.equal(
+    buildMovieFeedApiHref(2, [35], [], [], [], "movie", [], "KR"),
+    "/api/tmdb/feed?page=2&mediaType=movie&genres=35&origin=KR",
+  );
+});
+
 test("normalizeMoviePage rejects invalid values and caps TMDB pages", () => {
   assert.equal(normalizeMoviePage("2"), 2);
   assert.equal(normalizeMoviePage("bad"), 1);

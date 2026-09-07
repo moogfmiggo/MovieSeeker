@@ -584,6 +584,8 @@ export interface DiscoverMoviesParams {
   streamingRegion?: string;
   /** Restricts results to one or more selected streaming services (OR). */
   providerIds?: number[];
+  /** ISO 3166-1 country code for the production country requested by the user. */
+  originCountry?: string;
   page?: number;
   /** Explicit catalog searches can request TMDB's global rating order. */
   sortByRating?: boolean;
@@ -633,6 +635,9 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
     searchParams.with_watch_monetization_types = "flatrate|free|ads";
     searchParams.with_watch_providers = params.providerIds.join("|");
   }
+  if (params.originCountry) {
+    searchParams.with_origin_country = params.originCountry;
+  }
   return fetchThaiFirstMoviePage(
     "/discover/movie",
     searchParams,
@@ -647,6 +652,7 @@ export interface DiscoverTVSeriesParams {
   keywordMatch?: GenreMatchMode;
   providerIds?: number[];
   streamingRegion?: string;
+  originCountry?: string;
   page?: number;
 }
 
@@ -674,6 +680,9 @@ export async function discoverTVSeries(
     searchParams.watch_region = params.streamingRegion ?? DEFAULT_WATCH_REGION;
     searchParams.with_watch_monetization_types = "flatrate|free|ads";
     searchParams.with_watch_providers = params.providerIds.join("|");
+  }
+  if (params.originCountry) {
+    searchParams.with_origin_country = params.originCountry;
   }
   return fetchThaiFirstTVPage("/discover/tv", searchParams);
 }
