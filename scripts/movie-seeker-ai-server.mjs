@@ -10,7 +10,7 @@ const OLLAMA_URL = process.env.OLLAMA_URL || "http://127.0.0.1:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const OLLAMA_TIMEOUT_MS = readNumber(process.env.OLLAMA_TIMEOUT_MS, 12_000, 2_000, 60_000);
 const MAX_BODY_BYTES = 128 * 1024;
-const MAX_SEMANTIC_CANDIDATES = 20;
+const MAX_SEMANTIC_CANDIDATES = 10;
 const MAX_SEMANTIC_ATTRIBUTES = 8;
 const SEMANTIC_CACHE_MIN_CONFIDENCE = 0.55;
 const SEMANTIC_CACHE_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1_000;
@@ -594,7 +594,7 @@ async function parseSemantic(payload) {
       think: false,
       keep_alive: -1,
       format: semanticSchema,
-      options: { temperature: 0, num_predict: 2_500 },
+      options: { temperature: 0, num_predict: 1_400 },
       messages: [
         {
           role: "system",

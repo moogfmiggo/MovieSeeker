@@ -18,7 +18,7 @@ import { withTimeoutFallback } from "@/lib/timeout";
 export const dynamic = "force-dynamic";
 export const maxDuration = 45;
 
-const MAX_CANDIDATES = 20;
+const MAX_CANDIDATES = 10;
 const AI_HEALTH_TIMEOUT_MS = 800;
 const AI_ANALYSIS_TIMEOUT_MS = 35_000;
 const MINIMUM_CONFIDENCE = 0.55;
