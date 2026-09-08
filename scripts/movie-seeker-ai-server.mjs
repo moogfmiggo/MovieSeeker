@@ -352,12 +352,11 @@ function createSemanticPrompt(payload, research) {
     candidates: payload.candidates.map((candidate, index) => ({
       id: candidate.id,
       mediaType: candidate.mediaType,
-      title: candidate.title,
-      originalTitle: candidate.originalTitle,
+      // Only the original title/year identity reaches the model. Localized
+      // title and overview came from an untrusted browser request and are not
+      // needed once the server has performed its own plot research.
+      title: candidate.originalTitle || candidate.title,
       releaseYear: candidate.releaseYear,
-      // Client-supplied overview is only a last resort. When Wikipedia plot
-      // research exists it is omitted so it cannot influence a shared fact.
-      overview: research[index].story ? "" : candidate.overview,
       wikipediaStory: research[index].story,
       wikipediaUrl: research[index].sourceUrl,
     })),

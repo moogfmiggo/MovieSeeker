@@ -184,7 +184,7 @@ async function saveFacts(
     analysis.facts
       .filter(
         (fact): fact is SemanticAnalysisFact & { value: boolean } =>
-          typeof fact.value === "boolean" && fact.source.startsWith("wikipedia:"),
+          typeof fact.value === "boolean" && fact.confidence >= MINIMUM_CONFIDENCE,
       )
       .flatMap((fact) => {
         const candidate = candidateById.get(analysis.id);

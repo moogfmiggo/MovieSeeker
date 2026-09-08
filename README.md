@@ -44,8 +44,9 @@ cannot prove, such as `ตอนจบไม่เศร้า`, after the TMDB 
 For those conditions the RTX service researches plot information through the
 public MediaWiki API, returns true/false/unknown facts, and MovieSeeker only
 keeps titles that satisfy every requested condition with sufficient
-confidence. Research-backed facts are cached in Supabase so later searches
-can reuse them without running the model again.
+confidence. Confidence-qualified facts are tied to the title/year identity
+and cached in Supabase so later searches can reuse them without running the
+model again.
 
 Interactive requests are never queued: if the AI server is offline, busy,
 times out, or returns an invalid response, the Next.js route immediately uses
