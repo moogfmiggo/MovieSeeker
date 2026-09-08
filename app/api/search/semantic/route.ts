@@ -19,7 +19,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 45;
 
 const MAX_CANDIDATES = 10;
-const AI_HEALTH_TIMEOUT_MS = 800;
+// Cloudflare Quick Tunnel commonly needs just over one second from Vercel's
+// region. Three seconds still fails fast when the home server is offline,
+// without misclassifying ordinary tunnel latency as an unavailable GPU.
+const AI_HEALTH_TIMEOUT_MS = 3_000;
 const AI_ANALYSIS_TIMEOUT_MS = 35_000;
 const MINIMUM_CONFIDENCE = 0.55;
 const CACHE_TIMEOUT_MS = 1_200;
