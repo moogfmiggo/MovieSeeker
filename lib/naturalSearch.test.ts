@@ -15,6 +15,7 @@ test("fallback understands a Korean romantic-comedy series request", () => {
       topicSlugs: ["romantic-comedy"],
       originCountry: "KR",
       semanticConstraints: ["non_tragic_ending"],
+      storyRequirement: "",
     },
   );
 });
@@ -49,6 +50,7 @@ test("AI validation accepts only known taxonomy values and preserves fallback co
       topicSlugs: [],
       originCountry: "KR",
       semanticConstraints: [],
+      storyRequirement: "",
     },
   );
 });
@@ -90,4 +92,32 @@ test("negative story conditions never also select their positive opposite", () =
     interpretNaturalSearchFallback("หนังที่ไม่มีสัตว์ตายและตัวเอกไม่ตาย").semanticConstraints,
     ["no_protagonist_death", "no_animal_death"],
   );
+});
+
+test("fallback preserves a fight-each-other plot requirement outside the fixed taxonomy", () => {
+  const intent = interpretNaturalSearchFallback("หนังที่ซุปเปอร์ฮีโร่สู้กันเอง");
+  assert.deepEqual(intent.topicSlugs, ["superhero"]);
+  assert.equal(intent.storyRequirement, "ซูเปอร์ฮีโร่ต่อสู้กันเอง");
+  assert.match(
+    buildNaturalSearchHref(intent, "หนังที่ซุปเปอร์ฮีโร่สู้กันเอง", "genre-fallback"),
+    /story=%E0%B8%8B%E0%B8%B9%E0%B9%80%E0%B8%9B%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B8%AE%E0%B8%B5%E0%B9%82%E0%B8%A3%E0%B9%88%E0%B8%95%E0%B9%88%E0%B8%AD%E0%B8%AA%E0%B8%B9%E0%B9%89%E0%B8%81%E0%B8%B1%E0%B8%99%E0%B9%80%E0%B8%AD%E0%B8%87$/,
+  );
+});
+
+test("AI may add a free-form plot requirement without replacing deterministic catalog filters", () => {
+  const fallback = interpretNaturalSearchFallback("หนังซูเปอร์ฮีโร่ที่ฝ่ายเดียวกันหักหลังกัน");
+  const intent = validateAiSearchIntent(
+    {
+      mediaType: "movie",
+      genreIds: [18],
+      topicSlugs: [],
+      originCountry: "US",
+      semanticConstraints: [],
+      storyRequirement: "เพื่อนสนิทหักหลังกัน",
+    },
+    fallback,
+  );
+
+  assert.deepEqual(intent?.topicSlugs, ["superhero"]);
+  assert.equal(intent?.storyRequirement, "เพื่อนสนิทหักหลังกัน");
 });

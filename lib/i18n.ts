@@ -160,6 +160,7 @@ export const th = {
     aiInterpretation: "AI ช่วยแปลคำค้น แล้วคัดผลจากข้อมูลจริงของ MovieSeeker",
     genreFallback: "แสดงผลจากประเภท ประเทศ แนว และธีมที่ระบบเข้าใจได้ โดยไม่รอ AI Server",
     semanticWillApply: "ระบบจะตรวจเงื่อนไขเนื้อเรื่องกับแต่ละรายการก่อนแสดงผล",
+    storyRequirement: (requirement: string) => `เงื่อนไขเนื้อเรื่อง: ${requirement}`,
   },
   moviesError: {
     title: "ไม่สามารถโหลดรายการได้",
@@ -167,8 +168,8 @@ export const th = {
   },
   movieList: {
     recommendedForYou: "แนะนำสำหรับคุณบนสตรีมมิ่ง",
-    ratingOrder: "เรียงตามคะแนน TMDB สูง → ต่ำ",
-    loadedRatingOrder: "เรียงตามคะแนน TMDB สูง → ต่ำ จากผลที่โหลดแล้ว",
+    ratingOrder: "เรียงตามคะแนน TMDB สูง → ต่ำ (อย่างน้อย 200 โหวต)",
+    loadedRatingOrder: "เรียงตามคะแนน TMDB สูง → ต่ำ จากผลที่โหลดแล้ว (อย่างน้อย 200 โหวต)",
     ratingLabel: "คะแนนผู้ชม TMDB",
     unrated: "ยังไม่มีคะแนน",
     voteCount: (count: number) => `${count.toLocaleString("th-TH")} โหวต`,

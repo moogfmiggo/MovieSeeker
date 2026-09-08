@@ -24,6 +24,8 @@ export interface NaturalSearchIntent {
   originCountry?: string;
   /** Story conditions that require semantic research after catalog filtering. */
   semanticConstraints: SemanticConstraintSlug[];
+  /** Free-form plot condition that is not representable by the fixed taxonomy. */
+  storyRequirement: string;
 }
 
 interface OriginCountryDefinition {
@@ -53,6 +55,15 @@ const ROMANTIC_COMEDY_TERMS = [
   "romantic comedy",
   "romcom",
   "rom com",
+];
+const MAX_STORY_REQUIREMENT_LENGTH = 180;
+const CHARACTERS_FIGHT_EACH_OTHER_TERMS = [
+  "สู้กันเอง",
+  "ต่อสู้กันเอง",
+  "ปะทะกันเอง",
+  "หันมาสู้กัน",
+  "fight each other",
+  "fighting each other",
 ];
 
 /** Broad topic aliases are helpful in autocomplete but too ambiguous for automatic filtering. */
@@ -150,6 +161,27 @@ function inferSemanticConstraints(query: string): SemanticConstraintSlug[] {
   return normalizeSemanticConstraints([...matched]);
 }
 
+export function normalizeStoryRequirement(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_STORY_REQUIREMENT_LENGTH);
+}
+
+function inferStoryRequirement(rawQuery: unknown, normalizedQuery: string): string {
+  if (!containsAny(normalizedQuery, CHARACTERS_FIGHT_EACH_OTHER_TERMS)) return "";
+  return normalizeStoryRequirement(
+    containsTerm(normalizedQuery, "ซูเปอร์ฮีโร่") ||
+      containsTerm(normalizedQuery, "ซุปเปอร์ฮีโร่") ||
+      containsTerm(normalizedQuery, "superhero")
+      ? "ซูเปอร์ฮีโร่ต่อสู้กันเอง"
+      : "ตัวละครหลักต่อสู้กันเอง",
+  );
+}
+
 export function interpretNaturalSearchFallback(
   rawQuery: unknown,
   preferredMediaType: SearchMediaType = "movie",
@@ -162,6 +194,7 @@ export function interpretNaturalSearchFallback(
     topicSlugs: inferTopicSlugs(query, mediaType),
     originCountry: inferOriginCountry(query),
     semanticConstraints: inferSemanticConstraints(query),
+    storyRequirement: inferStoryRequirement(rawQuery, query),
   };
 }
 
@@ -210,6 +243,7 @@ export function validateAiSearchIntent(
   const genreIds = normalizeGenreIds(candidate.genreIds).filter((id) => validGenreIds.has(id));
   const topicSlugs = normalizeTopicSlugs(candidate.topicSlugs);
   const aiSemanticConstraints = normalizeSemanticConstraints(candidate.semanticConstraints);
+  const aiStoryRequirement = normalizeStoryRequirement(candidate.storyRequirement);
 
   // The deterministic Genre interpreter remains authoritative whenever it
   // found a catalog filter. A small local model may otherwise add a plausible
@@ -229,6 +263,7 @@ export function validateAiSearchIntent(
       ...fallback.semanticConstraints,
       ...aiSemanticConstraints,
     ]),
+    storyRequirement: fallback.storyRequirement || aiStoryRequirement,
   };
 }
 
@@ -255,5 +290,6 @@ export function buildNaturalSearchHref(
   if (intent.semanticConstraints.length > 0) {
     params.set("semantics", intent.semanticConstraints.join(","));
   }
+  if (intent.storyRequirement) params.set("story", intent.storyRequirement);
   return `${pathname}?${params.toString()}`;
 }

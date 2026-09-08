@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   evaluateSemanticConstraints,
+  evaluateSemanticAttribute,
   getSemanticStorageAttribute,
   normalizeSemanticConstraints,
 } from "./constraints";
@@ -39,6 +40,25 @@ test("low-confidence and missing story facts stay unknown instead of becoming fa
     ),
     "unknown",
   );
+});
+
+test("a query-specific story fact must explicitly match", () => {
+  const attribute = "story_match_deadbeef";
+  assert.equal(
+    evaluateSemanticAttribute(
+      attribute,
+      [{ attribute, value: true, confidence: 0.8, source: "test" }],
+    ),
+    "match",
+  );
+  assert.equal(
+    evaluateSemanticAttribute(
+      attribute,
+      [{ attribute, value: false, confidence: 0.8, source: "test" }],
+    ),
+    "reject",
+  );
+  assert.equal(evaluateSemanticAttribute(attribute, []), "unknown");
 });
 
 test("movie and TV facts use different storage attributes even when TMDB IDs collide", () => {

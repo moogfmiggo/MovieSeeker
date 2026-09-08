@@ -589,7 +589,11 @@ export interface DiscoverMoviesParams {
   page?: number;
   /** Explicit catalog searches can request TMDB's global rating order. */
   sortByRating?: boolean;
+  /** Avoids perfect-looking scores based on only a handful of votes. */
+  minimumVoteCount?: number;
 }
+
+export const RELIABLE_RATING_MINIMUM_VOTES = 200;
 
 /**
  * Generic TMDB discover wrapper used by the recommendation engine to build
@@ -603,6 +607,11 @@ export async function discoverMovies(params: DiscoverMoviesParams): Promise<TMDB
     sort_by: params.sortByRating ? "vote_average.desc" : "popularity.desc",
     page: String(params.page ?? 1),
   };
+  if (params.sortByRating) {
+    searchParams["vote_count.gte"] = String(
+      params.minimumVoteCount ?? RELIABLE_RATING_MINIMUM_VOTES,
+    );
+  }
   if (params.genreIds && params.genreIds.length > 0) {
     // Recommendation pools keep the historical OR default. Explicit search
     // surfaces can opt into AND so every chosen genre must be present.
@@ -662,6 +671,7 @@ export async function discoverTVSeries(
 ): Promise<TMDBTVSeriesResponse> {
   const searchParams: Record<string, string> = {
     sort_by: "vote_average.desc",
+    "vote_count.gte": String(RELIABLE_RATING_MINIMUM_VOTES),
     page: String(params.page ?? 1),
   };
   if (params.genreIds.length > 0) {

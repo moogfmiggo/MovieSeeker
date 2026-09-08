@@ -87,6 +87,7 @@ async function requestSemanticFilter(
   movies: readonly TMDBMovie[],
   mediaType: SemanticMediaType,
   constraints: readonly SemanticConstraintSlug[],
+  storyRequirement: string,
   signal?: AbortSignal,
 ): Promise<SemanticFilterResponse> {
   try {
@@ -96,6 +97,7 @@ async function requestSemanticFilter(
       body: JSON.stringify({
         mediaType,
         constraints,
+        storyRequirement,
         candidates: toSemanticCandidates(movies, mediaType),
       }),
       signal,
@@ -122,6 +124,7 @@ export function MovieList({
   searchQuery = "",
   originCountry = "",
   semanticConstraints = [],
+  storyRequirement = "",
   emptyMessage = th.movieList.noMoviesFound,
   initialPage = 1,
   totalPages = 1,
@@ -137,6 +140,7 @@ export function MovieList({
   searchQuery?: string;
   originCountry?: string;
   semanticConstraints?: readonly SemanticConstraintSlug[];
+  storyRequirement?: string;
   emptyMessage?: string;
   initialPage?: number;
   totalPages?: number;
@@ -152,8 +156,9 @@ export function MovieList({
   const [availablePages, setAvailablePages] = useState(totalPages);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
+  const hasSemanticRequirement = semanticConstraints.length > 0 || !!storyRequirement;
   const [semanticMode, setSemanticMode] = useState<SemanticFilterMode>(() =>
-    semanticConstraints.length === 0
+    !hasSemanticRequirement
       ? "not-needed"
       : movies.length === 0
         ? "applied"
@@ -173,10 +178,16 @@ export function MovieList({
   }, [mediaType]);
 
   useEffect(() => {
-    if (semanticConstraints.length === 0 || movies.length === 0) return;
+    if (!hasSemanticRequirement || movies.length === 0) return;
     const controller = new AbortController();
 
-    void requestSemanticFilter(movies, mediaType, semanticConstraints, controller.signal).then(
+    void requestSemanticFilter(
+      movies,
+      mediaType,
+      semanticConstraints,
+      storyRequirement,
+      controller.signal,
+    ).then(
       (result) => {
         if (controller.signal.aborted) return;
         if (!result.applied) {
@@ -190,7 +201,7 @@ export function MovieList({
     );
 
     return () => controller.abort();
-  }, [mediaType, movies, semanticConstraints]);
+  }, [hasSemanticRequirement, mediaType, movies, semanticConstraints, storyRequirement]);
 
   function handleToggleWatched(movieId: number) {
     setWatchedIds(mediaType === "tv" ? toggleWatchedSeries(movieId) : toggleWatched(movieId));
@@ -225,11 +236,12 @@ export function MovieList({
       const data: unknown = await response.json();
       if (!isMovieFeedResponse(data)) throw new Error("invalid movie feed response");
 
-      if (semanticConstraints.length > 0 && semanticMode === "applied") {
+      if (hasSemanticRequirement && semanticMode === "applied") {
         const semanticResult = await requestSemanticFilter(
           data.results,
           mediaType,
           semanticConstraints,
+          storyRequirement,
         );
         if (!semanticResult.applied) {
           // The no-queue rule applies to Show more too. If the RTX worker is
@@ -354,7 +366,7 @@ export function MovieList({
             disabled={isLoadingMore || semanticMode === "checking"}
             className="rounded-full border border-accent px-7 py-3 text-sm font-semibold text-accent transition hover:bg-accent hover:text-accent-foreground disabled:cursor-wait disabled:opacity-60"
           >
-            {isLoadingMore && semanticConstraints.length > 0 && semanticMode === "applied"
+            {isLoadingMore && hasSemanticRequirement && semanticMode === "applied"
               ? th.movieList.semanticLoadingMore
               : isLoadingMore
                 ? th.movieList.loadingMore

@@ -21,6 +21,7 @@ import { TitleSearchPanel } from "@/components/TitleSearchPanel";
 import { FALLBACK_GENRES, FALLBACK_TV_GENRES } from "@/lib/genres";
 import { th } from "@/lib/i18n";
 import { normalizeSemanticConstraints } from "@/lib/semantic/constraints";
+import { normalizeStoryRequirement } from "@/lib/naturalSearch";
 import type { TMDBGenre, TMDBPopularMoviesResponse, TMDBWatchProvider } from "@/types/tmdb";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export default async function MoviesPage({
     origin?: string | string[];
     q?: string | string[];
     semantics?: string | string[];
+    story?: string | string[];
   }>;
 }) {
   const currentSearch = await searchParams;
@@ -53,6 +55,10 @@ export default async function MoviesPage({
     ?.trim()
     .slice(0, 300) ?? "";
   const semanticConstraints = normalizeSemanticConstraints(currentSearch.semantics);
+  const storyRequirement = normalizeStoryRequirement(
+    Array.isArray(currentSearch.story) ? currentSearch.story[0] : currentSearch.story,
+  );
+  const hasSemanticRequirement = semanticConstraints.length > 0 || !!storyRequirement;
   const explicitMediaType =
     (Array.isArray(currentSearch.media) ? currentSearch.media[0] : currentSearch.media) === "tv"
       ? "tv"
@@ -195,7 +201,7 @@ export default async function MoviesPage({
           </h1>
           <p className="mt-1 text-sm opacity-70">
             {naturalQuery
-              ? semanticConstraints.length > 0
+              ? hasSemanticRequirement
                 ? th.moviesPage.semanticWillApply
                 : searchMode === "ai"
                 ? th.moviesPage.aiInterpretation
@@ -206,8 +212,13 @@ export default async function MoviesPage({
                 ? th.genreSearch.streamingProvidersHint
                 : th.moviesPage.subtitle}
           </p>
+          {storyRequirement && (
+            <p className="mt-3 inline-flex rounded-full border border-accent/50 bg-accent/10 px-3 py-2 text-xs font-medium text-accent">
+              {th.moviesPage.storyRequirement(storyRequirement)}
+            </p>
+          )}
           <MovieList
-            key={`movie|${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}|${semanticConstraints.join(",")}`}
+            key={`movie|${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}|${semanticConstraints.join(",")}|${storyRequirement}`}
             movies={movieData.results}
             providersByMovieId={movieProviders}
             selectedGenreIds={selectedGenreIds}
@@ -219,6 +230,7 @@ export default async function MoviesPage({
             totalPages={movieData.total_pages}
             originCountry={originCountry}
             semanticConstraints={semanticConstraints}
+            storyRequirement={storyRequirement}
           />
         </section>
       )}
@@ -230,7 +242,7 @@ export default async function MoviesPage({
           </h1>
           <p className="mt-1 text-sm opacity-70">
             {naturalQuery
-              ? semanticConstraints.length > 0
+              ? hasSemanticRequirement
                 ? th.moviesPage.semanticWillApply
                 : searchMode === "ai"
                 ? th.moviesPage.aiInterpretation
@@ -239,8 +251,13 @@ export default async function MoviesPage({
                   selectedSeriesGenreIds.length + selectedSeriesTopicSlugs.length,
                 )}
           </p>
+          {storyRequirement && (
+            <p className="mt-3 inline-flex rounded-full border border-accent/50 bg-accent/10 px-3 py-2 text-xs font-medium text-accent">
+              {th.moviesPage.storyRequirement(storyRequirement)}
+            </p>
+          )}
           <MovieList
-            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedSeriesTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}|${semanticConstraints.join(",")}`}
+            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedSeriesTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}|${semanticConstraints.join(",")}|${storyRequirement}`}
             movies={seriesData.results}
             providersByMovieId={seriesProviders}
             selectedProviderIds={selectedProviderIds}
@@ -252,6 +269,7 @@ export default async function MoviesPage({
             totalPages={seriesData.total_pages}
             originCountry={originCountry}
             semanticConstraints={semanticConstraints}
+            storyRequirement={storyRequirement}
           />
         </section>
       )}

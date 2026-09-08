@@ -131,6 +131,25 @@ export interface SemanticCandidateAnalysis {
 
 export type SemanticMatchDecision = "match" | "reject" | "unknown";
 
+export function evaluateSemanticAttribute(
+  attribute: string,
+  facts: readonly SemanticAnalysisFact[],
+  expectedValue = true,
+  minimumConfidence = 0.55,
+): SemanticMatchDecision {
+  const fact = facts
+    .filter(
+      (candidate) =>
+        candidate.attribute === attribute &&
+        candidate.value !== null &&
+        candidate.confidence >= minimumConfidence,
+    )
+    .sort((a, b) => b.confidence - a.confidence)[0];
+
+  if (!fact || typeof fact.value !== "boolean") return "unknown";
+  return fact.value === expectedValue ? "match" : "reject";
+}
+
 export function normalizeSemanticConstraints(raw: unknown): SemanticConstraintSlug[] {
   const values = Array.isArray(raw) ? raw : [raw];
   const normalized: SemanticConstraintSlug[] = [];
@@ -202,20 +221,17 @@ export function evaluateSemanticConstraints(
 
   for (const constraint of constraints) {
     const definition = getSemanticConstraintDefinition(constraint);
-    const fact = facts
-      .filter(
-        (candidate) =>
-          candidate.attribute === definition.attribute &&
-          candidate.value !== null &&
-          candidate.confidence >= minimumConfidence,
-      )
-      .sort((a, b) => b.confidence - a.confidence)[0];
-
-    if (!fact || typeof fact.value !== "boolean") {
+    const decision = evaluateSemanticAttribute(
+      definition.attribute,
+      facts,
+      definition.expectedValue,
+      minimumConfidence,
+    );
+    if (decision === "unknown") {
       hasUnknown = true;
       continue;
     }
-    if (fact.value !== definition.expectedValue) return "reject";
+    if (decision === "reject") return "reject";
   }
 
   return hasUnknown ? "unknown" : "match";

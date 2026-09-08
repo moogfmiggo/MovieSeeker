@@ -11,7 +11,7 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.5:9b";
 const OLLAMA_TIMEOUT_MS = readNumber(process.env.OLLAMA_TIMEOUT_MS, 12_000, 2_000, 60_000);
 const MAX_BODY_BYTES = 128 * 1024;
 const MAX_SEMANTIC_CANDIDATES = 20;
-const MAX_SEMANTIC_ATTRIBUTES = 5;
+const MAX_SEMANTIC_ATTRIBUTES = 8;
 const SEMANTIC_CACHE_MIN_CONFIDENCE = 0.55;
 const SEMANTIC_CACHE_MAX_AGE_MS = 180 * 24 * 60 * 60 * 1_000;
 const WIKIPEDIA_TIMEOUT_MS = readNumber(
@@ -159,6 +159,7 @@ const intentSchema = {
     topicSlugs: { type: "array", items: { type: "string" } },
     originCountry: { type: "string" },
     semanticConstraints: { type: "array", items: { type: "string" } },
+    storyRequirement: { type: "string" },
   },
   required: [
     "mediaType",
@@ -166,6 +167,7 @@ const intentSchema = {
     "topicSlugs",
     "originCountry",
     "semanticConstraints",
+    "storyRequirement",
   ],
 };
 
@@ -212,6 +214,9 @@ function createIntentPrompt(payload) {
     "ตัวอย่าง: ซีรี่เกาหลีโรแมนติกคอมเมดี้ หมายถึง tv, ประเทศ KR, Genre ตลก และ Topic romantic-comedy เท่านั้น ไม่ใช่แอ็คชั่นและผจญภัย",
     "เงื่อนไขเนื้อเรื่องให้เลือกเฉพาะ slug ที่มีใน taxonomy.semanticConstraints และใส่ใน semanticConstraints",
     "ตัวอย่าง: ตอนจบไม่เศร้า คือ semanticConstraints=[non_tragic_ending] ไม่ใช่ Genre",
+    "ถ้ามีเงื่อนไขเนื้อเรื่อง ความสัมพันธ์ หรือเหตุการณ์ที่ taxonomy แทนไม่ได้ ให้สรุปเฉพาะเงื่อนไขนั้นสั้น ๆ ใน storyRequirement โดยไม่ใส่คำว่า หนัง หรือ ซีรีส์",
+    "ตัวอย่าง: หนังที่ซูเปอร์ฮีโร่สู้กันเอง ให้ topicSlugs=[superhero] และ storyRequirement=ซูเปอร์ฮีโร่ต่อสู้กันเอง",
+    "ถ้าไม่มีเงื่อนไขเพิ่มเติม หรือเงื่อนไขถูกแทนด้วย semanticConstraints แล้ว ให้ storyRequirement เป็นสตริงว่าง",
     "ห้ามแต่งข้อมูล ห้ามใส่คำอธิบาย และต้องตอบตาม JSON schema เท่านั้น",
     JSON.stringify({
       preferredMediaType: payload.preferredMediaType,
@@ -382,6 +387,11 @@ function normalizeSemanticRequest(payload) {
         .filter((attribute) => typeof attribute === "string" && /^[a-z][a-z0-9_]{1,79}$/.test(attribute))
         .slice(0, MAX_SEMANTIC_ATTRIBUTES)
     : [];
+  const storyRequirement = normalizePlainText(payload.storyRequirement, 180);
+  const storyAttribute = typeof payload.storyAttribute === "string" &&
+      /^story_match_[a-f0-9]{16}$/.test(payload.storyAttribute)
+    ? payload.storyAttribute
+    : "";
   const seenIds = new Set();
   const candidates = payload.candidates
     .slice(0, MAX_SEMANTIC_CANDIDATES)
@@ -402,20 +412,48 @@ function normalizeSemanticRequest(payload) {
       releaseYear: /^\d{4}$/.test(candidate.releaseYear) ? candidate.releaseYear : "",
     }));
 
-  if (attributes.length === 0 || candidates.length === 0) throw new Error("invalid_request");
-  return { attributes, candidates };
+  if (
+    attributes.length === 0 ||
+    candidates.length === 0 ||
+    (!!storyRequirement !== !!storyAttribute) ||
+    (storyAttribute && !attributes.includes(storyAttribute))
+  ) {
+    throw new Error("invalid_request");
+  }
+  return { attributes, candidates, storyRequirement, storyAttribute };
+}
+
+function clarifyStoryRequirement(requirement) {
+  const normalized = requirement.toLocaleLowerCase("th-TH");
+  if (
+    /(ซูเปอร์ฮีโร่|ซุปเปอร์ฮีโร่|superhero)/i.test(normalized) &&
+    /(สู้กันเอง|ต่อสู้กันเอง|ปะทะกันเอง|fight each other|fighting each other)/i.test(normalized)
+  ) {
+    return "At least two central superheroes directly fight one another or stand on opposing sides in a physical conflict. Temporary conflict counts even if they later reconcile.";
+  }
+  return requirement;
 }
 
 function createSemanticPrompt(payload, research) {
+  const attributeDefinitions = {
+    tragic_ending:
+      "true only when the ending is dominated by tragedy, death, irreversible separation or despair; bittersweet with major permanent loss is true",
+    happy_ending: "true only when the main ending is clearly positive and the central characters end well",
+    protagonist_death: "true when a central protagonist dies during the story or ending",
+    animal_death: "true when a meaningful animal character dies",
+    plot_twist: "true when there is a material reveal or reversal intended as a plot twist",
+  };
+  const classifierRequirement = clarifyStoryRequirement(payload.storyRequirement);
+  if (payload.storyAttribute) {
+    attributeDefinitions[payload.storyAttribute] =
+      `true only when the title's actual plot satisfies this entire condition: ${classifierRequirement}`;
+  }
   return JSON.stringify({
-    task: "classify reusable story facts for every title",
-    attributeDefinitions: {
-      tragic_ending:
-        "true only when the ending is dominated by tragedy, death, irreversible separation or despair; bittersweet with major permanent loss is true",
-      happy_ending: "true only when the main ending is clearly positive and the central characters end well",
-      protagonist_death: "true when a central protagonist dies during the story or ending",
-      animal_death: "true when a meaningful animal character dies",
-      plot_twist: "true when there is a material reveal or reversal intended as a plot twist",
+    task: "classify story facts for every title",
+    attributeDefinitions,
+    userStoryRequirement: {
+      original: payload.storyRequirement,
+      classifierMeaning: classifierRequirement,
     },
     requestedAttributes: payload.attributes,
     rules: [
@@ -426,6 +464,9 @@ function createSemanticPrompt(payload, research) {
       "Use source=wikipedia only when supplied wikipediaStory supports the fact.",
       "Use source=model only for established plot knowledge; keep confidence at or below 0.65.",
       "Use source=unknown and confidence=0 for unknown.",
+      "For a story_match attribute, true means the plot satisfies the entire requirement, not merely one shared keyword.",
+      "Thai สู้กันเอง or ต่อสู้กันเอง means central heroes, allies, friends, or members of the same broad side directly fight one another; it remains true if the conflict is temporary or they later reconcile.",
+      "For example, Captain America: Civil War and Batman v Superman satisfy a superhero-fights-superhero requirement; Avengers: Endgame does not merely because several superheroes fight a common enemy.",
     ],
     candidates: payload.candidates.map((candidate, index) => ({
       id: candidate.id,
@@ -539,7 +580,12 @@ async function parseSemantic(payload) {
     return { analyses: cachedAnalyses, source: "cache" };
   }
 
-  const missingPayload = { attributes: normalized.attributes, candidates: missingCandidates };
+  const missingPayload = {
+    attributes: normalized.attributes,
+    candidates: missingCandidates,
+    storyRequirement: normalized.storyRequirement,
+    storyAttribute: normalized.storyAttribute,
+  };
   const research = await mapWithConcurrency(missingCandidates, 8, researchCandidate);
   const result = await callOllama(
     {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  evaluateSemanticAttribute,
   evaluateSemanticConstraints,
   getRequestedSemanticAttributes,
   getSemanticStorageAttribute,
@@ -9,6 +10,7 @@ import {
   type SemanticCandidateInput,
   type SemanticMediaType,
 } from "@/lib/semantic/constraints";
+import { normalizeStoryRequirement } from "@/lib/naturalSearch";
 import { SupabaseSemanticFactStore } from "@/lib/semantic/supabase-store";
 import type { KnownSemanticFact } from "@/lib/semantic/types";
 import { withTimeoutFallback } from "@/lib/timeout";
@@ -25,7 +27,22 @@ const CACHE_TIMEOUT_MS = 1_200;
 interface SemanticFilterRequest {
   mediaType?: unknown;
   constraints?: unknown;
+  storyRequirement?: unknown;
   candidates?: unknown;
+}
+
+function getStoryAttribute(requirement: string): string {
+  let firstHash = 2_166_136_261;
+  let secondHash = 2_166_136_261 ^ 0x9e3779b9;
+  const identity = requirement.normalize("NFKC").toLocaleLowerCase("th-TH");
+  for (let index = 0; index < identity.length; index += 1) {
+    const code = identity.charCodeAt(index);
+    firstHash ^= code;
+    firstHash = Math.imul(firstHash, 16_777_619);
+    secondHash ^= code + index;
+    secondHash = Math.imul(secondHash, 16_777_619);
+  }
+  return `story_match_${(firstHash >>> 0).toString(16).padStart(8, "0")}${(secondHash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 function normalizeText(raw: unknown, maxLength: number): string {
@@ -217,6 +234,8 @@ async function saveFacts(
 async function requestAiAnalysis(
   candidates: readonly SemanticCandidateInput[],
   attributes: readonly string[],
+  storyRequirement: string,
+  storyAttribute: string,
 ): Promise<{ analyses: SemanticCandidateAnalysis[]; source: "ai" | "cache" } | null> {
   const serverUrl = process.env.MOVIESEEKER_AI_SERVER_URL?.trim();
   const token = process.env.MOVIESEEKER_AI_SERVER_TOKEN?.trim();
@@ -235,7 +254,7 @@ async function requestAiAnalysis(
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ candidates, attributes }),
+      body: JSON.stringify({ candidates, attributes, storyRequirement, storyAttribute }),
       cache: "no-store",
       signal: AbortSignal.timeout(AI_ANALYSIS_TIMEOUT_MS),
     });
@@ -263,15 +282,20 @@ export async function POST(request: Request) {
 
   const mediaType: SemanticMediaType = body.mediaType === "tv" ? "tv" : "movie";
   const constraints = normalizeSemanticConstraints(body.constraints);
+  const storyRequirement = normalizeStoryRequirement(body.storyRequirement);
+  const storyAttribute = storyRequirement ? getStoryAttribute(storyRequirement) : "";
   const candidates = parseCandidates(body.candidates, mediaType);
-  if (constraints.length === 0 || candidates.length === 0) {
+  if ((constraints.length === 0 && !storyRequirement) || candidates.length === 0) {
     return NextResponse.json(
-      { error: "At least one valid constraint and candidate is required." },
+      { error: "At least one valid story condition and candidate is required." },
       { status: 400 },
     );
   }
 
-  const attributes = getRequestedSemanticAttributes(constraints);
+  const attributes = [
+    ...getRequestedSemanticAttributes(constraints),
+    ...(storyAttribute ? [storyAttribute] : []),
+  ];
   const cachedFacts = await readCachedFacts(candidates, mediaType, attributes);
   const cachedByCandidate = factsByCandidate(cachedFacts, candidates, mediaType, attributes);
   const missingCandidates = candidates.filter((candidate) => {
@@ -282,7 +306,12 @@ export async function POST(request: Request) {
   let freshAnalyses: SemanticCandidateAnalysis[] = [];
   let analysisSource: "ai" | "cache" = "cache";
   if (missingCandidates.length > 0) {
-    const response = await requestAiAnalysis(missingCandidates, attributes);
+    const response = await requestAiAnalysis(
+      missingCandidates,
+      attributes,
+      storyRequirement,
+      storyAttribute,
+    );
     if (!response) {
       return NextResponse.json(
         { applied: false, reason: "ai_unavailable" },
@@ -300,14 +329,23 @@ export async function POST(request: Request) {
   const unknownIds: number[] = [];
 
   for (const candidate of candidates) {
-    const decision = evaluateSemanticConstraints(
+    const facts = [
+      ...(cachedByCandidate.get(candidate.id) ?? []),
+      ...(freshByCandidate.get(candidate.id) ?? []),
+    ];
+    const fixedDecision = evaluateSemanticConstraints(
       constraints,
-      [
-        ...(cachedByCandidate.get(candidate.id) ?? []),
-        ...(freshByCandidate.get(candidate.id) ?? []),
-      ],
+      facts,
       MINIMUM_CONFIDENCE,
     );
+    const storyDecision = storyAttribute
+      ? evaluateSemanticAttribute(storyAttribute, facts, true, MINIMUM_CONFIDENCE)
+      : "match";
+    const decision = fixedDecision === "reject" || storyDecision === "reject"
+      ? "reject"
+      : fixedDecision === "unknown" || storyDecision === "unknown"
+        ? "unknown"
+        : "match";
     (decision === "match" ? matchedIds : decision === "reject" ? rejectedIds : unknownIds).push(
       candidate.id,
     );
