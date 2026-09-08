@@ -157,6 +157,7 @@ async function readCachedFacts(
   mediaType: SemanticMediaType,
   attributes: readonly string[],
 ): Promise<KnownSemanticFact[]> {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return [];
   const operation = new SupabaseSemanticFactStore()
     .getMany(
       candidates.map((candidate) => candidate.id),
@@ -179,6 +180,7 @@ async function saveFacts(
   candidates: readonly SemanticCandidateInput[],
   mediaType: SemanticMediaType,
 ): Promise<void> {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return;
   const candidateById = new Map(candidates.map((candidate) => [candidate.id, candidate]));
   const facts: KnownSemanticFact[] = analyses.flatMap((analysis) =>
     analysis.facts
@@ -215,7 +217,7 @@ async function saveFacts(
 async function requestAiAnalysis(
   candidates: readonly SemanticCandidateInput[],
   attributes: readonly string[],
-): Promise<SemanticCandidateAnalysis[] | null> {
+): Promise<{ analyses: SemanticCandidateAnalysis[]; source: "ai" | "cache" } | null> {
   const serverUrl = process.env.MOVIESEEKER_AI_SERVER_URL?.trim();
   const token = process.env.MOVIESEEKER_AI_SERVER_TOKEN?.trim();
   if (!serverUrl || !token) return null;
@@ -238,7 +240,14 @@ async function requestAiAnalysis(
       signal: AbortSignal.timeout(AI_ANALYSIS_TIMEOUT_MS),
     });
     if (!response.ok) return null;
-    return parseAiAnalyses(await response.json(), candidates, attributes);
+    const raw: unknown = await response.json();
+    const analyses = parseAiAnalyses(raw, candidates, attributes);
+    if (!analyses) return null;
+    const source =
+      raw && typeof raw === "object" && (raw as { source?: unknown }).source === "cache"
+        ? "cache"
+        : "ai";
+    return { analyses, source };
   } catch {
     return null;
   }
@@ -271,6 +280,7 @@ export async function POST(request: Request) {
   });
 
   let freshAnalyses: SemanticCandidateAnalysis[] = [];
+  let analysisSource: "ai" | "cache" = "cache";
   if (missingCandidates.length > 0) {
     const response = await requestAiAnalysis(missingCandidates, attributes);
     if (!response) {
@@ -279,7 +289,8 @@ export async function POST(request: Request) {
         { headers: { "cache-control": "no-store" } },
       );
     }
-    freshAnalyses = response;
+    freshAnalyses = response.analyses;
+    analysisSource = response.source;
     await saveFacts(freshAnalyses, missingCandidates, mediaType);
   }
 
@@ -305,7 +316,7 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       applied: true,
-      source: missingCandidates.length > 0 ? "ai" : "cache",
+      source: missingCandidates.length > 0 ? analysisSource : "cache",
       matchedIds,
       rejectedIds,
       unknownIds,

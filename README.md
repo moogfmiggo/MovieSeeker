@@ -45,8 +45,9 @@ For those conditions the RTX service researches plot information through the
 public MediaWiki API, returns true/false/unknown facts, and MovieSeeker only
 keeps titles that satisfy every requested condition with sufficient
 confidence. Confidence-qualified facts are tied to the title/year identity
-and cached in Supabase so later searches can reuse them without running the
-model again.
+and cached persistently on the RTX server so later searches can reuse them
+without running the model again. Supabase remains a second shared-cache layer
+when its server-side environment variables are available.
 
 Interactive requests are never queued: if the AI server is offline, busy,
 times out, or returns an invalid response, the Next.js route immediately uses
@@ -79,6 +80,11 @@ and accepts authenticated `POST /v1/intent` and `POST /v1/semantic-filter`
 requests. It handles one LLM request at a time; concurrent requests receive
 `503`, which deliberately activates the Genre fallback instead of building a
 backlog.
+
+The RTX semantic cache is written atomically to
+`%LOCALAPPDATA%\MovieSeeker\semantic-facts.json` on Windows. Set
+`MOVIESEEKER_SEMANTIC_CACHE_PATH` only when the host needs a different private
+location; never place this runtime data inside Git.
 
 For local Next.js development, copy the relevant values from `.env.example`
 into `.env.local` and set:
