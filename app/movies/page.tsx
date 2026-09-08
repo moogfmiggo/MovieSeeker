@@ -20,6 +20,7 @@ import { GenreSearchPanel } from "@/components/GenreSearchPanel";
 import { TitleSearchPanel } from "@/components/TitleSearchPanel";
 import { FALLBACK_GENRES, FALLBACK_TV_GENRES } from "@/lib/genres";
 import { th } from "@/lib/i18n";
+import { normalizeSemanticConstraints } from "@/lib/semantic/constraints";
 import type { TMDBGenre, TMDBPopularMoviesResponse, TMDBWatchProvider } from "@/types/tmdb";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export default async function MoviesPage({
     mode?: string | string[];
     origin?: string | string[];
     q?: string | string[];
-    unresolved?: string | string[];
+    semantics?: string | string[];
   }>;
 }) {
   const currentSearch = await searchParams;
@@ -51,6 +52,7 @@ export default async function MoviesPage({
   const naturalQuery = (Array.isArray(currentSearch.q) ? currentSearch.q[0] : currentSearch.q)
     ?.trim()
     .slice(0, 300) ?? "";
+  const semanticConstraints = normalizeSemanticConstraints(currentSearch.semantics);
   const explicitMediaType =
     (Array.isArray(currentSearch.media) ? currentSearch.media[0] : currentSearch.media) === "tv"
       ? "tv"
@@ -65,11 +67,6 @@ export default async function MoviesPage({
   const originCountry = typeof rawOrigin === "string" && /^[A-Z]{2}$/.test(rawOrigin)
     ? rawOrigin
     : undefined;
-  const hasUnresolvedConstraints =
-    (Array.isArray(currentSearch.unresolved)
-      ? currentSearch.unresolved[0]
-      : currentSearch.unresolved) === "1";
-
   const hasMovieChoice =
     selectedGenreIds.length > 0 ||
     selectedTopicSlugs.length > 0 ||
@@ -198,8 +195,8 @@ export default async function MoviesPage({
           </h1>
           <p className="mt-1 text-sm opacity-70">
             {naturalQuery
-              ? hasUnresolvedConstraints
-                ? th.moviesPage.semanticNotApplied
+              ? semanticConstraints.length > 0
+                ? th.moviesPage.semanticWillApply
                 : searchMode === "ai"
                 ? th.moviesPage.aiInterpretation
                 : th.moviesPage.genreFallback
@@ -210,7 +207,7 @@ export default async function MoviesPage({
                 : th.moviesPage.subtitle}
           </p>
           <MovieList
-            key={`movie|${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}`}
+            key={`movie|${selectedGenreIds.join(",")}|${selectedTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}|${semanticConstraints.join(",")}`}
             movies={movieData.results}
             providersByMovieId={movieProviders}
             selectedGenreIds={selectedGenreIds}
@@ -221,6 +218,7 @@ export default async function MoviesPage({
             initialPage={movieData.page}
             totalPages={movieData.total_pages}
             originCountry={originCountry}
+            semanticConstraints={semanticConstraints}
           />
         </section>
       )}
@@ -232,8 +230,8 @@ export default async function MoviesPage({
           </h1>
           <p className="mt-1 text-sm opacity-70">
             {naturalQuery
-              ? hasUnresolvedConstraints
-                ? th.moviesPage.semanticNotApplied
+              ? semanticConstraints.length > 0
+                ? th.moviesPage.semanticWillApply
                 : searchMode === "ai"
                 ? th.moviesPage.aiInterpretation
                 : th.moviesPage.genreFallback
@@ -242,7 +240,7 @@ export default async function MoviesPage({
                 )}
           </p>
           <MovieList
-            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedSeriesTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}`}
+            key={`tv|${selectedSeriesGenreIds.join(",")}|${selectedSeriesTopicSlugs.join(",")}|${selectedProviderIds.join(",")}|${originCountry ?? ""}|${semanticConstraints.join(",")}`}
             movies={seriesData.results}
             providersByMovieId={seriesProviders}
             selectedProviderIds={selectedProviderIds}
@@ -253,6 +251,7 @@ export default async function MoviesPage({
             initialPage={seriesData.page}
             totalPages={seriesData.total_pages}
             originCountry={originCountry}
+            semanticConstraints={semanticConstraints}
           />
         </section>
       )}

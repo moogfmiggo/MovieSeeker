@@ -14,7 +14,7 @@ test("fallback understands a Korean romantic-comedy series request", () => {
       genreIds: [35],
       topicSlugs: ["romantic-comedy"],
       originCountry: "KR",
-      unresolvedConstraints: ["non_tragic_ending"],
+      semanticConstraints: ["non_tragic_ending"],
     },
   );
 });
@@ -39,7 +39,7 @@ test("AI validation accepts only known taxonomy values and preserves fallback co
         genreIds: [35, 999999],
         topicSlugs: ["romantic-comedy", "made-up"],
         originCountry: "kr",
-        unresolvedConstraints: [],
+        semanticConstraints: [],
       },
       fallback,
     ),
@@ -48,7 +48,7 @@ test("AI validation accepts only known taxonomy values and preserves fallback co
       genreIds: [35],
       topicSlugs: [],
       originCountry: "KR",
-      unresolvedConstraints: [],
+      semanticConstraints: [],
     },
   );
 });
@@ -61,7 +61,7 @@ test("AI validation cannot invent a production country", () => {
       genreIds: [99, 10752],
       topicSlugs: [],
       originCountry: "US",
-      unresolvedConstraints: [],
+      semanticConstraints: [],
     },
     fallback,
   );
@@ -77,10 +77,17 @@ test("natural-search URL records media, origin and fallback without creating a q
   );
 });
 
-test("natural-search URL marks semantic requests that Genre fallback cannot prove", () => {
+test("natural-search URL carries story conditions into semantic filtering", () => {
   const intent = interpretNaturalSearchFallback("หนังตลกตอนจบไม่เศร้า", "movie");
   assert.match(
     buildNaturalSearchHref(intent, "หนังตลกตอนจบไม่เศร้า", "genre-fallback"),
-    /unresolved=1$/,
+    /semantics=non_tragic_ending$/,
+  );
+});
+
+test("negative story conditions never also select their positive opposite", () => {
+  assert.deepEqual(
+    interpretNaturalSearchFallback("หนังที่ไม่มีสัตว์ตายและตัวเอกไม่ตาย").semanticConstraints,
+    ["no_protagonist_death", "no_animal_death"],
   );
 });

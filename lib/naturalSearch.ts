@@ -7,6 +7,12 @@ import {
 import { buildMovieSearchHref, normalizeGenreIds } from "./movieSearch";
 import { MOVIE_TOPICS, normalizeTopicSlugs } from "./movieTopics";
 import { normalizeStreamingProviderIds } from "./streamingProviders";
+import {
+  getSemanticConstraintTaxonomy,
+  normalizeSemanticConstraints,
+  SEMANTIC_CONSTRAINTS,
+  type SemanticConstraintSlug,
+} from "./semantic/constraints";
 
 export type SearchMediaType = "movie" | "tv";
 export type SearchIntentSource = "ai" | "genre-fallback";
@@ -16,8 +22,8 @@ export interface NaturalSearchIntent {
   genreIds: number[];
   topicSlugs: string[];
   originCountry?: string;
-  /** Requests the current catalog cannot prove without semantic research. */
-  unresolvedConstraints: string[];
+  /** Story conditions that require semantic research after catalog filtering. */
+  semanticConstraints: SemanticConstraintSlug[];
 }
 
 interface OriginCountryDefinition {
@@ -47,17 +53,6 @@ const ROMANTIC_COMEDY_TERMS = [
   "romantic comedy",
   "romcom",
   "rom com",
-];
-
-const NON_TRAGIC_ENDING_TERMS = [
-  "ตอนจบไม่เศร้า",
-  "จบไม่เศร้า",
-  "ไม่จบเศร้า",
-  "ตอนจบดี",
-  "จบดี",
-  "จบแฮปปี้",
-  "happy ending",
-  "not sad ending",
 ];
 
 /** Broad topic aliases are helpful in autocomplete but too ambiguous for automatic filtering. */
@@ -139,6 +134,22 @@ function inferOriginCountry(query: string): string | undefined {
   return ORIGIN_COUNTRIES.find((country) => containsAny(query, country.aliases))?.code;
 }
 
+function inferSemanticConstraints(query: string): SemanticConstraintSlug[] {
+  const matched = new Set(
+    SEMANTIC_CONSTRAINTS.filter((constraint) => containsAny(query, constraint.aliases)).map(
+      (constraint) => constraint.slug,
+    ),
+  );
+
+  // A negated condition is more specific than its positive substring. This
+  // matters for phrases such as "ไม่มีสัตว์ตาย", which must never request
+  // both animal_death=true and animal_death=false.
+  if (matched.has("no_protagonist_death")) matched.delete("protagonist_death");
+  if (matched.has("no_animal_death")) matched.delete("animal_death");
+
+  return normalizeSemanticConstraints([...matched]);
+}
+
 export function interpretNaturalSearchFallback(
   rawQuery: unknown,
   preferredMediaType: SearchMediaType = "movie",
@@ -150,9 +161,7 @@ export function interpretNaturalSearchFallback(
     genreIds: inferGenreIds(query, mediaType),
     topicSlugs: inferTopicSlugs(query, mediaType),
     originCountry: inferOriginCountry(query),
-    unresolvedConstraints: containsAny(query, NON_TRAGIC_ENDING_TERMS)
-      ? ["non_tragic_ending"]
-      : [],
+    semanticConstraints: inferSemanticConstraints(query),
   };
 }
 
@@ -161,6 +170,7 @@ export interface NaturalSearchTaxonomy {
   seriesGenres: Array<{ id: number; name: string; aliases: readonly string[] }>;
   topics: Array<{ slug: string; name: string; aliases: readonly string[] }>;
   originCountries: Array<{ code: string; name: string; aliases: readonly string[] }>;
+  semanticConstraints: ReturnType<typeof getSemanticConstraintTaxonomy>;
 }
 
 export function getNaturalSearchTaxonomy(): NaturalSearchTaxonomy {
@@ -179,6 +189,7 @@ export function getNaturalSearchTaxonomy(): NaturalSearchTaxonomy {
       aliases: [topic.keywordQuery, ...(topic.aliases ?? [])],
     })),
     originCountries: ORIGIN_COUNTRIES.map((country) => ({ ...country })),
+    semanticConstraints: getSemanticConstraintTaxonomy(),
   };
 }
 
@@ -198,13 +209,7 @@ export function validateAiSearchIntent(
   );
   const genreIds = normalizeGenreIds(candidate.genreIds).filter((id) => validGenreIds.has(id));
   const topicSlugs = normalizeTopicSlugs(candidate.topicSlugs);
-  const aiUnresolvedConstraints = Array.isArray(candidate.unresolvedConstraints)
-    ? candidate.unresolvedConstraints
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim().slice(0, 80))
-        .filter(Boolean)
-        .slice(0, 5)
-    : [];
+  const aiSemanticConstraints = normalizeSemanticConstraints(candidate.semanticConstraints);
 
   // The deterministic Genre interpreter remains authoritative whenever it
   // found a catalog filter. A small local model may otherwise add a plausible
@@ -220,7 +225,10 @@ export function validateAiSearchIntent(
     // interpreter found an explicit country alias in the user's own query;
     // a small model must never invent a production country from story context.
     originCountry: fallback.originCountry,
-    unresolvedConstraints: [...new Set([...fallback.unresolvedConstraints, ...aiUnresolvedConstraints])],
+    semanticConstraints: normalizeSemanticConstraints([
+      ...fallback.semanticConstraints,
+      ...aiSemanticConstraints,
+    ]),
   };
 }
 
@@ -244,6 +252,8 @@ export function buildNaturalSearchHref(
   params.set("mode", source);
   if (query) params.set("q", query);
   if (intent.originCountry) params.set("origin", intent.originCountry);
-  if (intent.unresolvedConstraints.length > 0) params.set("unresolved", "1");
+  if (intent.semanticConstraints.length > 0) {
+    params.set("semantics", intent.semanticConstraints.join(","));
+  }
   return `${pathname}?${params.toString()}`;
 }

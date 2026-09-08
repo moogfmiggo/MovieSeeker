@@ -148,6 +148,60 @@ export class SupabaseSemanticFactStore implements SemanticFactStore {
       .map(rowToFact)
       .filter((fact): fact is SemanticFact => fact !== null);
   }
+
+  /**
+   * Reads a whole result page in one Supabase request. Semantic search uses
+   * this instead of issuing one network request for every card/attribute.
+   */
+  async getMany(movieIds: readonly number[], attributes: readonly string[]): Promise<KnownSemanticFact[]> {
+    const normalizedMovieIds = [...new Set(movieIds.filter(isValidMovieId))];
+    const normalizedAttributes = [
+      ...new Set(attributes.filter((attribute) => isValidAttribute(attribute))),
+    ];
+    if (normalizedMovieIds.length === 0 || normalizedAttributes.length === 0) return [];
+
+    const client = getClient();
+    const { data, error } = await client
+      .from(FACTS_TABLE)
+      .select("movie_id, attribute, value, confidence, source, status")
+      .in("movie_id", normalizedMovieIds)
+      .in("attribute", normalizedAttributes);
+
+    if (error) throw new SemanticStoreError(`Failed to read semantic facts: ${error.message}`);
+
+    const grouped = new Map<string, KnownSemanticFact[]>();
+    for (const row of (data ?? []) as SemanticFactRow[]) {
+      const fact = rowToFact(row);
+      if (!fact || fact.status === "unanalyzed") continue;
+      const key = `${fact.movieId}:${fact.attribute}`;
+      const current = grouped.get(key) ?? [];
+      current.push(fact);
+      grouped.set(key, current);
+    }
+
+    return [...grouped.values()].map(pickMostAuthoritative);
+  }
+
+  /** Saves one analyzed result page with a single upsert. */
+  async setMany(facts: readonly KnownSemanticFact[]): Promise<void> {
+    if (facts.length === 0) return;
+    const updatedAt = new Date().toISOString();
+    const rows = facts.map((fact) => ({
+      movie_id: fact.movieId,
+      attribute: fact.attribute,
+      value: fact.value,
+      confidence: fact.confidence,
+      source: fact.source,
+      status: fact.status,
+      updated_at: updatedAt,
+    }));
+
+    const client = getClient();
+    const { error } = await client
+      .from(FACTS_TABLE)
+      .upsert(rows, { onConflict: "movie_id,attribute,source" });
+    if (error) throw new SemanticStoreError(`Failed to save semantic facts: ${error.message}`);
+  }
 }
 
 // --- Task 9: analysis queue ---

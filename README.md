@@ -39,15 +39,28 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 MovieSeeker can use the locally installed `qwen3.5:9b` model to translate a
 Thai or English natural-language request into the site's existing TMDB Genre
-and keyword filters. Interactive requests are never queued: if the AI server
-is offline, busy, times out, or returns an invalid response, the Next.js route
-immediately uses the deterministic Genre interpreter and continues to TMDB.
+and keyword filters. It also evaluates story-level conditions that Genre
+cannot prove, such as `ตอนจบไม่เศร้า`, after the TMDB candidate list is ready.
+For those conditions the RTX service researches plot information through the
+public MediaWiki API, returns true/false/unknown facts, and MovieSeeker only
+keeps titles that satisfy every requested condition with sufficient
+confidence. Research-backed facts are cached in Supabase so later searches
+can reuse them without running the model again.
+
+Interactive requests are never queued: if the AI server is offline, busy,
+times out, or returns an invalid response, the Next.js route immediately uses
+the deterministic Genre result instead.
 
 The browser never calls Ollama or the RTX machine directly:
 
 ```text
-Browser -> Vercel /api/search/intent -> private RTX endpoint -> Ollama
+Browser -> Vercel /api/search/intent   -> private RTX endpoint -> Ollama
                                   \-> Genre fallback (no queue)
+
+Browser -> Vercel /api/search/semantic -> Supabase fact cache
+                                      -> private RTX endpoint
+                                         -> Wikipedia plot research -> Ollama
+                                      \-> Genre fallback (no queue)
 ```
 
 ### Run locally
@@ -61,9 +74,10 @@ npm run ai:server
 ```
 
 The server binds to `127.0.0.1:4317`, warms the model, exposes `GET /health`,
-and accepts authenticated `POST /v1/intent` requests. It handles one LLM
-request at a time; concurrent requests receive `503`, which deliberately
-activates the Genre fallback instead of building a backlog.
+and accepts authenticated `POST /v1/intent` and `POST /v1/semantic-filter`
+requests. It handles one LLM request at a time; concurrent requests receive
+`503`, which deliberately activates the Genre fallback instead of building a
+backlog.
 
 For local Next.js development, copy the relevant values from `.env.example`
 into `.env.local` and set:

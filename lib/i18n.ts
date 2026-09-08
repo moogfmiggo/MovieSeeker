@@ -159,7 +159,7 @@ export const th = {
     naturalSearch: (query: string) => `ผลลัพธ์สำหรับ “${query}”`,
     aiInterpretation: "AI ช่วยแปลคำค้น แล้วคัดผลจากข้อมูลจริงของ MovieSeeker",
     genreFallback: "แสดงผลจากประเภท ประเทศ แนว และธีมที่ระบบเข้าใจได้ โดยไม่รอ AI Server",
-    semanticNotApplied: "แสดงผลจากประเภท ประเทศ แนว และธีมก่อน โดยยังไม่ใช้เงื่อนไขเนื้อเรื่องที่ไม่มีข้อมูลยืนยัน",
+    semanticWillApply: "ระบบจะตรวจเงื่อนไขเนื้อเรื่องกับแต่ละรายการก่อนแสดงผล",
   },
   moviesError: {
     title: "ไม่สามารถโหลดรายการได้",
@@ -180,6 +180,13 @@ export const th = {
     loadingMore: "กำลังโหลด...",
     loadMoreError: "โหลดหนังเพิ่มเติมไม่สำเร็จ กรุณาลองอีกครั้ง",
     noSeriesFound: "ไม่พบซีรีส์ที่ตรงกับตัวเลือกนี้",
+    semanticChecking: "กำลังตรวจเงื่อนไขเนื้อเรื่องจากข้อมูลที่ค้นหาได้...",
+    semanticApplied: (matched: number, excluded: number) =>
+      `ยืนยันว่าตรงเงื่อนไข ${matched} เรื่อง${excluded > 0 ? ` · ตัดรายการที่ไม่ตรงหรือยังยืนยันไม่ได้ ${excluded} เรื่อง` : ""}`,
+    semanticFallback: "ขณะนี้เครื่อง AI ไม่พร้อม จึงแสดงผลตามประเภท ประเทศ แนว และธีมทันทีโดยไม่รอคิว",
+    semanticNoConfirmed: "ยังไม่พบเรื่องที่มีข้อมูลเพียงพอให้ยืนยันว่าตรงเงื่อนไขเนื้อเรื่อง",
+    semanticTryMore: "กดแสดงเพิ่มเติมเพื่อตรวจรายการชุดถัดไป",
+    semanticLoadingMore: "กำลังโหลดและตรวจเนื้อเรื่อง...",
   },
   watchedPage: {
     title: "รายการที่ดูแล้ว",
