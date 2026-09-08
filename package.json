@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "ai:server": "node scripts/movie-seeker-ai-server.mjs"
+    "ai:server": "node scripts/movie-seeker-ai-server.mjs",
+    "ai:public": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-movie-seeker-public-ai.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

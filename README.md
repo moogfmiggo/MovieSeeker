@@ -73,7 +73,27 @@ MOVIESEEKER_AI_SERVER_URL=http://127.0.0.1:4317
 MOVIESEEKER_AI_SERVER_TOKEN=replace-with-the-same-secret
 ```
 
-For the public Vercel deployment, `MOVIESEEKER_AI_SERVER_URL` must be a private,
-HTTPS-protected route to this local service and the matching token must be set
-as a server-side Vercel environment variable. Do not expose Ollama port 11434
-or put either token in a `NEXT_PUBLIC_` variable.
+For the public Vercel deployment, `MOVIESEEKER_AI_SERVER_URL` must be an HTTPS
+tunnel to this local service and the matching token must be set as a server-side
+Vercel environment variable. Do not expose Ollama port 11434 or put either
+token in a `NEXT_PUBLIC_` variable.
+
+### Start the public RTX server on Windows
+
+After `cloudflared` is installed, the Windows host can start the complete public
+AI path with one command:
+
+```powershell
+npm run ai:public
+```
+
+The script stores the shared token with Windows DPAPI under the current user's
+local application data, starts Ollama/Qwen and the authenticated AI service,
+creates a Cloudflare Quick Tunnel, updates the two Vercel Production secrets,
+and redeploys the current production alias. It never writes the token to Git.
+
+Quick Tunnel URLs change whenever the connector restarts, so the script updates
+Vercel and redeploys on each start. A named Cloudflare Tunnel on a domain owned
+by the project should replace this temporary connector before high-traffic
+production use. If startup or connectivity fails, Vercel continues with the
+deterministic Genre fallback and does not queue AI requests.
