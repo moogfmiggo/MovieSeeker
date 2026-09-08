@@ -255,7 +255,10 @@ export function GenreSearchForm({
       )}
 
       {streamingProviders.length > 0 && (
-        <details className="mt-6 rounded-xl border border-border bg-background/40 p-4" defaultOpen={selectedProviderIds.length > 0}>
+        <details
+          className="mt-6 rounded-xl border border-border bg-background/40 p-4"
+          open={selectedProviderIds.length > 0 || undefined}
+        >
           <summary className="cursor-pointer text-sm font-semibold text-muted">
             {th.genreSearch.optionalStreamingProviders}
           </summary>
