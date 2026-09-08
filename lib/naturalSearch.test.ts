@@ -53,6 +53,22 @@ test("AI validation accepts only known taxonomy values and preserves fallback co
   );
 });
 
+test("AI validation cannot invent a production country", () => {
+  const fallback = interpretNaturalSearchFallback("หนังสารคดีเกี่ยวกับสงคราม", "movie");
+  const intent = validateAiSearchIntent(
+    {
+      mediaType: "movie",
+      genreIds: [99, 10752],
+      topicSlugs: [],
+      originCountry: "US",
+      unresolvedConstraints: [],
+    },
+    fallback,
+  );
+
+  assert.equal(intent?.originCountry, undefined);
+});
+
 test("natural-search URL records media, origin and fallback without creating a queue", () => {
   const intent = interpretNaturalSearchFallback("ซีรี่เกาหลีคอมเมดี้", "movie");
   assert.equal(

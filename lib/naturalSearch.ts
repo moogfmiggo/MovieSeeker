@@ -198,12 +198,6 @@ export function validateAiSearchIntent(
   );
   const genreIds = normalizeGenreIds(candidate.genreIds).filter((id) => validGenreIds.has(id));
   const topicSlugs = normalizeTopicSlugs(candidate.topicSlugs);
-  const country = typeof candidate.originCountry === "string"
-    ? candidate.originCountry.trim().toUpperCase()
-    : "";
-  const originCountry = ORIGIN_COUNTRIES.some((item) => item.code === country)
-    ? country
-    : undefined;
   const aiUnresolvedConstraints = Array.isArray(candidate.unresolvedConstraints)
     ? candidate.unresolvedConstraints
         .filter((item): item is string => typeof item === "string")
@@ -222,7 +216,10 @@ export function validateAiSearchIntent(
     mediaType,
     genreIds: hasDeterministicCatalogFilters ? fallback.genreIds : genreIds,
     topicSlugs: hasDeterministicCatalogFilters ? fallback.topicSlugs : topicSlugs,
-    originCountry: originCountry ?? fallback.originCountry,
+    // Country is a precise catalog filter. Only keep it when the deterministic
+    // interpreter found an explicit country alias in the user's own query;
+    // a small model must never invent a production country from story context.
+    originCountry: fallback.originCountry,
     unresolvedConstraints: [...new Set([...fallback.unresolvedConstraints, ...aiUnresolvedConstraints])],
   };
 }
